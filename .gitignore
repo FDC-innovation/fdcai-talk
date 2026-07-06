@@ -49,6 +49,7 @@ pnpm-lock.yaml
 *.onnx
 *.safetensors
 models/
+!backend/models/MuseTalk/scripts/musetalk_worker.py
 uploads/
 outputs/
 voice_profiles/

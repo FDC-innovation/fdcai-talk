@@ -127,7 +127,7 @@ export function AuthModal() {
             <Sparkles size={22} className="text-white" />
           </div>
           <div className="text-center">
-            <h1 id="auth-modal-title" className="text-2xl font-black gradient-text">AvatarAI</h1>
+            <h1 id="auth-modal-title" className="text-2xl font-black gradient-text">FDCAI</h1>
             <p id="auth-modal-desc" className="text-sm text-gray-500 mt-0.5">Sign in to your account</p>
           </div>
         </div>

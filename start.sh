@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  AvatarAI — One-command startup script
+#  FDCAI — One-command startup script
 #  Usage:
 #    ./start.sh              # Docker mode (default)
 #    ./start.sh --dev        # Manual/dev mode (no Docker)
@@ -48,7 +48,7 @@ usage() {
 # ── Banner ────────────────────────────────────────────────────────────────────
 echo -e "${BOLD}${CYAN}"
 echo "  ╔═══════════════════════════════════════╗"
-echo "  ║   🎭  AvatarAI — Real-Time Avatars    ║"
+echo "  ║   🎭  FDCAI — Real-Time Avatars    ║"
 echo "  ╚═══════════════════════════════════════╝"
 echo -e "${RESET}"
 

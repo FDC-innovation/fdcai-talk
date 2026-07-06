@@ -101,9 +101,22 @@ class TTSService:
             raise ValueError(f"Unsupported TTS provider: {self.provider}")
 
         try:
+            device = "cuda" if self._check_cuda() else "cpu"
+
+            # Chatterbox 0.1.7's from_pretrained() calls torch.load() internally
+            # without map_location, which crashes on CPU-only machines with:
+            # "Attempting to deserialize object on a CUDA device but
+            # torch.cuda.is_available() is False". Patch torch.load to always
+            # map checkpoints to our target device before importing the model.
+            # See: https://github.com/resemble-ai/chatterbox/issues/96
+            _original_torch_load = torch.load
+            def _patched_torch_load(*args, **kwargs):
+                kwargs.setdefault("map_location", torch.device(device))
+                return _original_torch_load(*args, **kwargs)
+            torch.load = _patched_torch_load
+
             from chatterbox.mtl_tts import ChatterboxMultilingualTTS
 
-            device = "cuda" if self._check_cuda() else "cpu"
             logger.info(f"Loading Chatterbox multilingual TTS on {device}...")
             self.model = await asyncio.to_thread(
                 ChatterboxMultilingualTTS.from_pretrained, device=device

@@ -174,7 +174,7 @@ export default function Home() {
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-accent-600 flex items-center justify-center shadow-glow-sm">
               <Sparkles size={16} className="text-white" />
             </div>
-            <span className="font-bold text-lg gradient-text">AvatarAI</span>
+            <span className="font-bold text-lg gradient-text">FDCAI</span>
           </div>
 
           <div className="flex items-center gap-1 p-1 rounded-xl bg-surface-800/80 backdrop-blur-xl border border-white/8 overflow-x-auto">

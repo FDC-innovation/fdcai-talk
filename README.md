@@ -48,6 +48,7 @@ AvatarAI is an open-source, production-ready platform for building **photorealis
 ```
 
 **What makes AvatarAI different:**
+
 - 🎤 **Zero-shot voice cloning** — 10 seconds of audio is all you need (Chatterbox Multilingual)
 - 🎭 **Any face, any language** — upload a JPEG, pick from 23 languages, start talking
 - ⚡ **Token-streaming pipeline** — the LLM streams live tokens while TTS + lip-sync run per sentence; the first video chunk plays before the model finishes its reply
@@ -61,16 +62,16 @@ AvatarAI is an open-source, production-ready platform for building **photorealis
 
 ## ⚔️ How AvatarAI compares
 
-| | **AvatarAI** | Duix-Avatar | Linly-Talker | AIAvatarKit |
-|---|---|---|---|---|
-| Real-time conversation | ✅ WebSocket streaming | ❌ offline video gen | ✅ (Gradio / WebRTC spin-off) | ✅ |
-| Lip-sync video | ✅ MuseTalk V1.5 | ✅ proprietary models | ✅ multiple engines | ❌ (drives external avatars) |
-| Voice cloning | ✅ 10 s, 23 languages | ✅ | ✅ | ❌ |
-| Barge-in / interruption | ✅ | ❌ | ✅ (stream variant) | ✅ |
-| Local / free LLM | ✅ Ollama, vLLM | ❌ | ✅ | ✅ |
-| Web app with auth & history | ✅ Next.js + JWT + Postgres | ❌ Windows client | ❌ Gradio demo UI | ❌ library |
-| Rate limiting, CI, tests, IaC | ✅ | ❌ | ❌ | ❌ |
-| License | MIT | custom | MIT | Apache-2.0 |
+|                               | **AvatarAI**                | Duix-Avatar           | Linly-Talker                  | AIAvatarKit                  |
+| ----------------------------- | --------------------------- | --------------------- | ----------------------------- | ---------------------------- |
+| Real-time conversation        | ✅ WebSocket streaming      | ❌ offline video gen  | ✅ (Gradio / WebRTC spin-off) | ✅                           |
+| Lip-sync video                | ✅ MuseTalk V1.5            | ✅ proprietary models | ✅ multiple engines           | ❌ (drives external avatars) |
+| Voice cloning                 | ✅ 10 s, 23 languages       | ✅                    | ✅                            | ❌                           |
+| Barge-in / interruption       | ✅                          | ❌                    | ✅ (stream variant)           | ✅                           |
+| Local / free LLM              | ✅ Ollama, vLLM             | ❌                    | ✅                            | ✅                           |
+| Web app with auth & history   | ✅ Next.js + JWT + Postgres | ❌ Windows client     | ❌ Gradio demo UI             | ❌ library                   |
+| Rate limiting, CI, tests, IaC | ✅                          | ❌                    | ❌                            | ❌                           |
+| License                       | MIT                         | custom                | MIT                           | Apache-2.0                   |
 
 > Toolkits like Linly-Talker are great research playgrounds; Duix ships a Windows product. **AvatarAI is the one you can deploy as a real multi-user web service.**
 
@@ -78,22 +79,22 @@ AvatarAI is an open-source, production-ready platform for building **photorealis
 
 ## ✨ Features
 
-| Category | Details |
-|---|---|
-| 🤖 **LLM Backends** | Claude (prompt-cached) · GPT-4o · **Ollama / vLLM / LM Studio (local, free)** |
-| 🎤 **Voice Cloning** | Record 10–60 s → Chatterbox Multilingual zero-shot cloning |
-| 🗣️ **Speech-to-Text** | Whisper (`faster-whisper`, CUDA), decodes browser WebM natively |
-| 🎬 **Lip-Sync Video** | MuseTalk V1.5 persistent worker (30 FPS on GPU) · FFmpeg fallback (CPU) |
-| ⚡ **Streaming Pipeline** | Live LLM tokens + per-sentence video chunks over WebSocket |
-| ✋ **Barge-In** | Speak or hit stop mid-reply — in-flight turn cancels in ms |
-| 🔉 **TTS Fallback Chain** | chatterbox → edge-tts (free neural voices) → gTTS — never silent |
-| 😊 **Emotion Detection** | Live emotion badges per message |
-| 🌍 **23 Languages** | Whisper multilingual STT + Chatterbox multilingual TTS |
-| 🏠 **Local-First Storage** | `USE_LOCAL_STORAGE=true` — no AWS needed for dev |
-| 🔐 **Auth & Sessions** | JWT authentication, conversation history, persistent sessions |
-| 📊 **Observability** | Prometheus · Celery Flower · Sentry · structured logging |
-| 🧪 **Tested** | Full pytest suite — users, avatars, sessions, health checks |
-| 🚀 **AWS GPU Deploy** | One-command `g5.xlarge` deploy with CUDA 11.8 + float16 |
+| Category                   | Details                                                                       |
+| -------------------------- | ----------------------------------------------------------------------------- |
+| 🤖 **LLM Backends**        | Claude (prompt-cached) · GPT-4o · **Ollama / vLLM / LM Studio (local, free)** |
+| 🎤 **Voice Cloning**       | Record 10–60 s → Chatterbox Multilingual zero-shot cloning                    |
+| 🗣️ **Speech-to-Text**      | Whisper (`faster-whisper`, CUDA), decodes browser WebM natively               |
+| 🎬 **Lip-Sync Video**      | MuseTalk V1.5 persistent worker (30 FPS on GPU) · FFmpeg fallback (CPU)       |
+| ⚡ **Streaming Pipeline**  | Live LLM tokens + per-sentence video chunks over WebSocket                    |
+| ✋ **Barge-In**            | Speak or hit stop mid-reply — in-flight turn cancels in ms                    |
+| 🔉 **TTS Fallback Chain**  | chatterbox → edge-tts (free neural voices) → gTTS — never silent              |
+| 😊 **Emotion Detection**   | Live emotion badges per message                                               |
+| 🌍 **23 Languages**        | Whisper multilingual STT + Chatterbox multilingual TTS                        |
+| 🏠 **Local-First Storage** | `USE_LOCAL_STORAGE=true` — no AWS needed for dev                              |
+| 🔐 **Auth & Sessions**     | JWT authentication, conversation history, persistent sessions                 |
+| 📊 **Observability**       | Prometheus · Celery Flower · Sentry · structured logging                      |
+| 🧪 **Tested**              | Full pytest suite — users, avatars, sessions, health checks                   |
+| 🚀 **AWS GPU Deploy**      | One-command `g5.xlarge` deploy with CUDA 11.8 + float16                       |
 
 ---
 
@@ -201,12 +202,12 @@ cp .env.example .env          # add your ANTHROPIC_API_KEY (or OPENAI_API_KEY)
 docker compose up -d
 ```
 
-| Service | URL |
-|---|---|
-| 🖥️ Frontend | http://localhost:3000 |
-| ⚙️ Backend API | http://localhost:8000 |
-| 📖 Swagger Docs | http://localhost:8000/docs |
-| 🌸 Celery Flower | http://localhost:5555 |
+| Service          | URL                        |
+| ---------------- | -------------------------- |
+| 🖥️ Frontend      | http://localhost:3000      |
+| ⚙️ Backend API   | http://localhost:8000      |
+| 📖 Swagger Docs  | http://localhost:8000/docs |
+| 🌸 Celery Flower | http://localhost:5555      |
 
 > **No AWS required.** Set `USE_LOCAL_STORAGE=true` (default) — uploads saved to `backend/uploads/`.
 
@@ -257,11 +258,11 @@ MuseTalk achieves **30 FPS at 256×256 on a V100-class GPU** (source: [MuseTalk 
 
 ### Recommended Instance
 
-| Instance | GPU | VRAM | Spot $/hr | MuseTalk FPS |
-|---|---|---|---|---|
-| `g4dn.xlarge` | T4 | 16 GB | ~$0.16 | ~15–20 FPS |
-| `g5.xlarge` | A10G | 24 GB | ~$0.30 | **~30 FPS** ✓ |
-| `g6.xlarge` | L4 | 24 GB | ~$0.24 | **~30 FPS** ✓ |
+| Instance      | GPU  | VRAM  | Spot $/hr | MuseTalk FPS  |
+| ------------- | ---- | ----- | --------- | ------------- |
+| `g4dn.xlarge` | T4   | 16 GB | ~$0.16    | ~15–20 FPS    |
+| `g5.xlarge`   | A10G | 24 GB | ~$0.30    | **~30 FPS** ✓ |
+| `g6.xlarge`   | L4   | 24 GB | ~$0.24    | **~30 FPS** ✓ |
 
 **Recommended: `g5.xlarge` Spot** (~$72/mo at 8 hrs/day).
 
@@ -279,6 +280,7 @@ bash /opt/ai-avatar-system/scripts/deploy-aws.sh --update
 ```
 
 The script automatically:
+
 - Installs Docker + nvidia-docker2
 - Verifies GPU is accessible
 - Downloads MuseTalk models (~9 GB)
@@ -292,6 +294,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 **What `docker-compose.prod.yml` adds over development:**
+
 - GPU reservation (`nvidia` driver, count=1) for backend + celery-worker
 - `float16` inference enabled automatically on CUDA → ~2× speedup
 - Persistent `musetalk_models` volume (survive container restarts)
@@ -386,6 +389,7 @@ WS  /ws/session/{session_id}
 ```
 
 **Client → Server:**
+
 ```json
 { "type": "text",         "text": "Hello!" }
 { "type": "audio",        "audio": "<base64-webm>" }
@@ -396,6 +400,7 @@ WS  /ws/session/{session_id}
 ```
 
 **Server → Client:**
+
 ```json
 { "type": "token",            "token": "Hel" }       // live LLM stream
 { "type": "transcription",    "text": "Hello!" }
@@ -447,31 +452,34 @@ JWT_EXPIRATION_HOURS=24
 ## 🛠️ Tech Stack
 
 ### Frontend
-| Library | Purpose |
-|---|---|
+
+| Library               | Purpose       |
+| --------------------- | ------------- |
 | Next.js 14 + React 18 | App framework |
-| TypeScript 5 | Type safety |
-| Tailwind CSS | Styling |
-| Zustand | Global state |
+| TypeScript 5          | Type safety   |
+| Tailwind CSS          | Styling       |
+| Zustand               | Global state  |
 
 ### Backend
-| Library | Purpose |
-|---|---|
-| FastAPI | Async REST API + WebSocket |
-| SQLAlchemy 2 (async) | ORM with asyncpg |
-| PostgreSQL 15 | Primary database |
-| Alembic | Migrations |
-| Redis 7 | Cache + Celery broker |
-| Celery | Background tasks |
+
+| Library              | Purpose                    |
+| -------------------- | -------------------------- |
+| FastAPI              | Async REST API + WebSocket |
+| SQLAlchemy 2 (async) | ORM with asyncpg           |
+| PostgreSQL 15        | Primary database           |
+| Alembic              | Migrations                 |
+| Redis 7              | Cache + Celery broker      |
+| Celery               | Background tasks           |
 
 ### AI / ML
-| Model | Purpose |
-|---|---|
-| Claude / GPT-4o / Ollama (local) | LLM conversation |
-| Whisper (`faster-whisper`) | Speech-to-text |
+
+| Model                                 | Purpose                                     |
+| ------------------------------------- | ------------------------------------------- |
+| Claude / GPT-4o / Ollama (local)      | LLM conversation                            |
+| Whisper (`faster-whisper`)            | Speech-to-text                              |
 | Chatterbox Multilingual (Resemble AI) | TTS + zero-shot voice cloning, 23 languages |
-| Edge TTS → gTTS | Free no-GPU fallback voices |
-| MuseTalk V1.5 | Photorealistic lip-sync (30 FPS on GPU) |
+| Edge TTS → gTTS                       | Free no-GPU fallback voices                 |
+| MuseTalk V1.5                         | Photorealistic lip-sync (30 FPS on GPU)     |
 
 ---
 
@@ -515,42 +523,49 @@ pytest --cov=app --cov-report=html  # HTML coverage
 <summary><strong>Do I need a GPU?</strong></summary>
 
 No — everything runs on CPU. MuseTalk takes 30–90 s/sentence on CPU (the `simple` engine is instant). For real-time lip-sync, use an AWS `g5.xlarge` (~$0.30/hr spot) or any 16 GB+ NVIDIA card.
+
 </details>
 
 <details>
 <summary><strong>Can I run it with no API key, fully offline?</strong></summary>
 
 Yes — set `LLM_PROVIDER=ollama`, run [Ollama](https://ollama.com) (`ollama run llama3.1`), and you have a fully local, free conversation stack: Whisper STT, local LLM, Chatterbox TTS, MuseTalk video.
+
 </details>
 
 <details>
 <summary><strong>How do I get something to talk to quickly?</strong></summary>
 
 Run `python scripts/seed_demo.py` — it creates three demo avatars (AI-generated faces, distinct personalities) and optionally cloned demo voices with `--with-voices`.
+
 </details>
 
 <details>
 <summary><strong>How do I get MuseTalk models?</strong></summary>
 
 Run `bash scripts/setup_musetalk.sh` — downloads ~9 GB of models automatically.
+
 </details>
 
 <details>
 <summary><strong>Why does the first response take longer?</strong></summary>
 
 The MuseTalk persistent worker loads all models into GPU VRAM on the first request (~60 s on GPU, ~5 min on CPU). Subsequent requests reuse the loaded models.
+
 </details>
 
 <details>
 <summary><strong>What happens if the TTS model can't load?</strong></summary>
 
 The pipeline degrades gracefully: chatterbox → **edge-tts** (free Microsoft neural voices) → gTTS. The UI shows a one-time notice when a cloned voice couldn't be applied.
+
 </details>
 
 <details>
 <summary><strong>What avatar photo works best?</strong></summary>
 
 A clear, well-lit frontal face photo (JPEG/PNG/WebP). Avoid sunglasses or heavy occlusion.
+
 </details>
 
 ---

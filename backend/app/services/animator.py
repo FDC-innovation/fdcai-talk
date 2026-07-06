@@ -101,7 +101,9 @@ class AvatarAnimator:
             return self._worker_proc
 
         musetalk_dir: Path = self._musetalk_dir  # type: ignore[assignment]
-        worker_script = musetalk_dir / "scripts" / "musetalk_worker.py"
+        # Prefer the committed copy in backend/scripts/ so it survives gitignore on models/
+        _backend_scripts = Path(__file__).resolve().parent.parent.parent / "scripts" / "musetalk_worker.py"
+        worker_script = _backend_scripts if _backend_scripts.exists() else musetalk_dir / "scripts" / "musetalk_worker.py"
 
         logger.info("Starting persistent MuseTalk worker (loading models once)…")
         proc = await asyncio.create_subprocess_exec(
@@ -180,8 +182,8 @@ class AvatarAnimator:
                 self._worker_proc = None
                 raise RuntimeError(f"MuseTalk worker pipe is dead: {e}") from e
 
-            # GPU: expect ~5-15s per sentence; CPU: up to 5 min
-            infer_timeout = 60 if self.device == "cuda" else 300
+            # GPU: expect ~5-15s per sentence; CPU: up to 30 min
+            infer_timeout = 60 if self.device == "cuda" else 1800
             try:
                 result_line = await asyncio.wait_for(proc.stdout.readline(), timeout=infer_timeout)
             except asyncio.TimeoutError:
