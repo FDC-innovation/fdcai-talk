@@ -24,6 +24,15 @@ step()    { echo -e "\n${BOLD}▶ $*${RESET}"; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# ── GPU detection ─────────────────────────────────────────────────────────────
+_detect_gpu() {
+  if command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null 2>&1; then
+    echo "gpu"
+  else
+    echo "cpu"
+  fi
+}
+
 MODE="docker"
 [[ "${1:-}" == "--dev"     ]] && MODE="dev"
 [[ "${1:-}" == "--stop"    ]] && MODE="stop"
@@ -58,7 +67,12 @@ echo -e "${RESET}"
 if [[ "$MODE" == "stop" ]]; then
   step "Stopping all services"
   if command -v docker &>/dev/null; then
-    docker compose down --remove-orphans && success "Docker services stopped"
+    GPU_MODE=$(_detect_gpu)
+    if [[ "$GPU_MODE" == "gpu" ]]; then
+      docker compose -f docker-compose.yml -f docker-compose.gpu.yml down --remove-orphans && success "Docker services stopped"
+    else
+      docker compose down --remove-orphans && success "Docker services stopped"
+    fi
   fi
   # Kill any manual dev processes
   pkill -f "uvicorn main:app" 2>/dev/null && success "Backend stopped" || true
@@ -71,7 +85,12 @@ fi
 #  LOGS
 # =============================================================================
 if [[ "$MODE" == "logs" ]]; then
-  docker compose logs -f --tail=50
+  GPU_MODE=$(_detect_gpu)
+  if [[ "$GPU_MODE" == "gpu" ]]; then
+    docker compose -f docker-compose.yml -f docker-compose.gpu.yml logs -f --tail=50
+  else
+    docker compose logs -f --tail=50
+  fi
   exit 0
 fi
 
@@ -80,7 +99,12 @@ fi
 # =============================================================================
 if [[ "$MODE" == "status" ]]; then
   step "Service Status"
-  docker compose ps 2>/dev/null || echo "Docker not running"
+  GPU_MODE=$(_detect_gpu)
+  if [[ "$GPU_MODE" == "gpu" ]]; then
+    docker compose -f docker-compose.yml -f docker-compose.gpu.yml ps 2>/dev/null || echo "Docker not running"
+  else
+    docker compose ps 2>/dev/null || echo "Docker not running"
+  fi
   echo ""
   for url in \
     "Frontend      http://localhost:3000" \
@@ -200,11 +224,21 @@ if [[ "$MODE" == "docker" ]]; then
   fi
   success "Docker is running"
 
+  # GPU auto-detection
+  GPU_MODE=$(_detect_gpu)
+  if [[ "$GPU_MODE" == "gpu" ]]; then
+    success "NVIDIA GPU detected — enabling GPU acceleration"
+    DC="docker compose -f docker-compose.yml -f docker-compose.gpu.yml"
+  else
+    info "No GPU detected — running in CPU mode"
+    DC="docker compose"
+  fi
+
   step "Building and starting all services"
   info "This may take a few minutes on first run (downloading images + building)..."
   echo ""
 
-  docker compose up -d --build
+  $DC up -d --build
 
   step "Waiting for services to be healthy"
   echo -n "  Postgres "

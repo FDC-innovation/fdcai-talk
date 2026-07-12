@@ -1,0 +1,22 @@
+# GPU override — merged on top of docker-compose.yml when an NVIDIA GPU is detected.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+# start.sh applies this automatically when nvidia-smi is available.
+
+services:
+  backend:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu, compute, utility]
+
+  celery-worker:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu, compute, utility]
