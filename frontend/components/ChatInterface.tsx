@@ -5,7 +5,7 @@ import {
   Send, Mic, MicOff, Video, Loader2, Volume2, VolumeX,
   Sparkles, Clock, Copy, RotateCcw, Wand2,
   MessageCircle, Zap, Activity, Download, Globe,
-  Pencil, Trash2, Check, X, Keyboard, Plug, Square,
+  Pencil, Trash2, Check, X, Keyboard, Plug, Square, Bot, User,
 } from 'lucide-react'
 import { useMutation } from '@tanstack/react-query'
 import { toast } from 'react-hot-toast'
@@ -206,6 +206,8 @@ export function ChatInterface({ avatarId, voiceId, resumeSessionId, onSessionCre
   // Video playback state
   const [showVideo, setShowVideo] = useState(false)           // true while a chunk is playing
   const [currentChunkProgress, setCurrentChunkProgress] = useState({ current: 0, total: 0 })
+  const [turnComplete, setTurnComplete] = useState(false)     // true after video_chunk_end
+  const [isDownloading, setIsDownloading] = useState(false)
 
   // Chunk queue — managed via refs to avoid stale closures in event handlers
   const chunkQueueRef = useRef<VideoChunk[]>([])
@@ -433,6 +435,7 @@ export function ChatInterface({ avatarId, voiceId, resumeSessionId, onSessionCre
       case 'video_chunk_start':
         chunkQueueRef.current = []
         setCurrentChunkProgress({ current: 0, total: data.total_chunks })
+        setTurnComplete(false)
         break
 
       case 'video_chunk': {
@@ -457,6 +460,7 @@ export function ChatInterface({ avatarId, voiceId, resumeSessionId, onSessionCre
       case 'video_chunk_end':
         // If nothing ever played (all chunks failed), clear spinner
         if (!isPlayingRef.current) setIsProcessing(false)
+        setTurnComplete(true)
         break
 
       case 'status':
@@ -624,7 +628,32 @@ export function ChatInterface({ avatarId, voiceId, resumeSessionId, onSessionCre
     chunkQueueRef.current = []
     isPlayingRef.current = false
     setShowVideo(false)
+    setTurnComplete(false)
     if (videoRef.current) videoRef.current.src = ''
+  }
+
+  const downloadSessionVideo = async () => {
+    if (!sessionId || isDownloading) return
+    setIsDownloading(true)
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const token = localStorage.getItem('token')
+      const res = await fetch(`${API_URL}/api/v1/sessions/${sessionId}/download-video`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!res.ok) throw new Error(`Server returned ${res.status}`)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `fdcai-${sessionId.slice(0, 8)}.mp4`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      toast.error('Download failed — try again')
+    } finally {
+      setIsDownloading(false)
+    }
   }
 
   const copyMessage = (content: string) => {
@@ -862,6 +891,19 @@ export function ChatInterface({ avatarId, voiceId, resumeSessionId, onSessionCre
                   <RotateCcw size={15} />
                 </button>
               )}
+              {turnComplete && sessionId && (
+                <button
+                  onClick={downloadSessionVideo}
+                  disabled={isDownloading}
+                  className="btn-icon"
+                  title="Download full video"
+                  aria-label="Download merged session video"
+                >
+                  {isDownloading
+                    ? <span className="text-xs animate-pulse">…</span>
+                    : <Download size={15} />}
+                </button>
+              )}
               <button
                 onClick={() => setIsMuted(m => !m)}
                 className={`btn-icon ${isMuted ? 'text-red-400 border-red-500/30' : ''}`}
@@ -934,16 +976,28 @@ export function ChatInterface({ avatarId, voiceId, resumeSessionId, onSessionCre
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 messages-scroll">
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5 messages-scroll">
           {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full gap-4 py-12 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-600/20 to-accent-600/10
-                              flex items-center justify-center border border-white/8">
-                <Sparkles size={28} className="text-primary-400" />
+            <div className="flex flex-col items-center justify-center h-full gap-5 py-12 text-center">
+              <div className="relative">
+                <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-primary-500/30 to-accent-600/20
+                                flex items-center justify-center border border-primary-500/20 shadow-glow">
+                  <Sparkles size={34} className="text-primary-400" />
+                </div>
+                <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-green-500 border-2 border-surface-900 flex items-center justify-center">
+                  <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                </div>
               </div>
-              <div>
-                <p className="text-white font-medium mb-1">Start the conversation</p>
-                <p className="text-gray-500 text-sm">Type a message or press the mic button</p>
+              <div className="space-y-2">
+                <p className="text-white font-semibold text-lg">Ready to chat</p>
+                <p className="text-gray-500 text-sm max-w-[220px]">Type below or tap the mic to start talking with your avatar</p>
+              </div>
+              <div className="flex flex-col gap-2 w-full max-w-[240px]">
+                {['Hello! Who are you?', 'Tell me something interesting', 'What can you help me with?'].map(tip => (
+                  <div key={tip} className="text-xs text-gray-600 bg-surface-800/50 border border-white/5 rounded-xl px-3 py-2 text-left">
+                    💬 {tip}
+                  </div>
+                ))}
               </div>
             </div>
           ) : (
@@ -954,34 +1008,34 @@ export function ChatInterface({ avatarId, voiceId, resumeSessionId, onSessionCre
               return (
                 <div
                   key={message.id}
-                  className={`flex gap-2.5 animate-slide-up ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
-                  style={{ animationDelay: `${idx * 0.05}s` }}
+                  className={`flex gap-3 animate-slide-up ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
+                  style={{ animationDelay: `${idx * 0.04}s` }}
                 >
-                  <div className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold
+                  {/* Avatar icon */}
+                  <div className={`w-8 h-8 rounded-2xl flex-shrink-0 flex items-center justify-center shadow-md
                     ${isUser
-                      ? 'bg-gradient-to-br from-accent-600 to-accent-800'
-                      : 'bg-gradient-to-br from-primary-600 to-primary-800'
+                      ? 'bg-gradient-to-br from-accent-500 to-accent-700'
+                      : 'bg-gradient-to-br from-primary-500 to-primary-700'
                     }`}
                   >
-                    {isUser ? 'U' : 'AI'}
+                    {isUser ? <User size={14} className="text-white" /> : <Bot size={14} className="text-white" />}
                   </div>
-                  <div className={`max-w-[85%] group ${isUser ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
+
+                  <div className={`max-w-[80%] group ${isUser ? 'items-end' : 'items-start'} flex flex-col gap-1.5`}>
+                    {/* Sender label */}
+                    <span className={`text-[11px] font-medium px-1 ${isUser ? 'text-accent-400 text-right' : 'text-primary-400'}`}>
+                      {isUser ? 'You' : 'FDCAI'}
+                    </span>
+
                     {editingMessageId === message.id ? (
-                      // Inline editor — Enter saves, Esc cancels, Shift+Enter newline
                       <div className="w-full flex flex-col gap-1.5">
                         <textarea
                           autoFocus
                           value={editDraft}
                           onChange={(e) => setEditDraft(e.target.value)}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                              e.preventDefault()
-                              saveEditMessage(message.id)
-                            }
-                            if (e.key === 'Escape') {
-                              e.preventDefault()
-                              cancelEditMessage()
-                            }
+                            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEditMessage(message.id) }
+                            if (e.key === 'Escape') { e.preventDefault(); cancelEditMessage() }
                           }}
                           maxLength={8000}
                           rows={3}
@@ -991,76 +1045,55 @@ export function ChatInterface({ avatarId, voiceId, resumeSessionId, onSessionCre
                           aria-label="Edit message"
                         />
                         <div className="flex items-center gap-1.5 justify-end">
-                          <button
-                            onClick={cancelEditMessage}
-                            className="text-xs text-gray-400 hover:text-white px-2 py-1 rounded-md hover:bg-white/5"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            onClick={() => saveEditMessage(message.id)}
-                            className="text-xs text-white bg-primary-600 hover:bg-primary-500 px-2.5 py-1 rounded-md
-                                       flex items-center gap-1"
-                          >
-                            <Check size={11} />
-                            Save
+                          <button onClick={cancelEditMessage} className="text-xs text-gray-400 hover:text-white px-2 py-1 rounded-md hover:bg-white/5">Cancel</button>
+                          <button onClick={() => saveEditMessage(message.id)} className="text-xs text-white bg-primary-600 hover:bg-primary-500 px-2.5 py-1 rounded-md flex items-center gap-1">
+                            <Check size={11} /> Save
                           </button>
                         </div>
                       </div>
                     ) : (
-                      <div className={`relative px-4 py-2.5 rounded-2xl text-sm leading-relaxed
+                      <div className={`relative px-4 py-3 text-sm leading-relaxed shadow-sm
                         ${isUser
-                          ? 'bg-gradient-to-br from-primary-700/80 to-accent-700/60 text-white rounded-tr-sm'
-                          : 'bg-surface-700/80 border border-white/8 text-gray-200 rounded-tl-sm'
+                          ? 'bg-gradient-to-br from-accent-600 to-primary-700 text-white rounded-2xl rounded-tr-sm'
+                          : 'bg-surface-700/90 border border-white/10 text-gray-100 rounded-2xl rounded-tl-sm'
                         }`}
                       >
-                        {message.content}
-                        {/* Hover action menu — only on persisted messages (have a real DB id) */}
-                        <div className={`absolute -top-2 ${isUser ? '-left-2' : '-right-2'} flex items-center gap-1
-                                         opacity-0 group-hover:opacity-100 transition-opacity`}>
-                          <button
-                            onClick={() => copyMessage(message.content)}
-                            className="w-6 h-6 rounded-full bg-surface-600 border border-white/10
-                                       flex items-center justify-center hover:bg-surface-500"
-                            title="Copy"
-                            aria-label="Copy message"
-                          >
-                            <Copy size={10} className="text-gray-400" />
+                        <p className="whitespace-pre-wrap break-words">{message.content}</p>
+
+                        {/* Hover action buttons */}
+                        <div className={`absolute -top-2 ${isUser ? 'left-1' : 'right-1'} flex items-center gap-1
+                                         opacity-0 group-hover:opacity-100 transition-opacity duration-150`}>
+                          <button onClick={() => copyMessage(message.content)}
+                            className="w-6 h-6 rounded-full bg-surface-600 border border-white/15 flex items-center justify-center hover:bg-surface-500 shadow-sm"
+                            title="Copy" aria-label="Copy message">
+                            <Copy size={10} className="text-gray-300" />
                           </button>
                           {message.persisted && (
                             <>
-                              <button
-                                onClick={() => startEditMessage(message)}
-                                className="w-6 h-6 rounded-full bg-surface-600 border border-white/10
-                                           flex items-center justify-center hover:bg-surface-500"
-                                title="Edit"
-                                aria-label="Edit message"
-                              >
-                                <Pencil size={10} className="text-gray-400" />
+                              <button onClick={() => startEditMessage(message)}
+                                className="w-6 h-6 rounded-full bg-surface-600 border border-white/15 flex items-center justify-center hover:bg-surface-500 shadow-sm"
+                                title="Edit" aria-label="Edit message">
+                                <Pencil size={10} className="text-gray-300" />
                               </button>
-                              <button
-                                onClick={() => deleteMessage(message.id)}
-                                className="w-6 h-6 rounded-full bg-surface-600 border border-white/10
-                                           flex items-center justify-center hover:bg-red-600/30"
-                                title="Delete"
-                                aria-label="Delete message"
-                              >
-                                <Trash2 size={10} className="text-gray-400" />
+                              <button onClick={() => deleteMessage(message.id)}
+                                className="w-6 h-6 rounded-full bg-surface-600 border border-white/15 flex items-center justify-center hover:bg-red-600/50 shadow-sm"
+                                title="Delete" aria-label="Delete message">
+                                <Trash2 size={10} className="text-gray-300" />
                               </button>
                             </>
                           )}
                         </div>
                       </div>
                     )}
+
+                    {/* Timestamp + emotion */}
                     <div className={`flex items-center gap-1.5 px-1 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
-                      <Clock size={10} className="text-gray-600" />
-                      <span className="text-xs text-gray-600">
+                      <Clock size={9} className="text-gray-600" />
+                      <span className="text-[11px] text-gray-600">
                         {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                       {emotion !== 'neutral' && (
-                        <span className={`text-xs ${emotionCfg.color}`}>
-                          {emotionCfg.label.split(' ')[0]}
-                        </span>
+                        <span className={`text-[11px] ${emotionCfg.color}`}>{emotionCfg.label.split(' ')[0]}</span>
                       )}
                     </div>
                   </div>
@@ -1068,18 +1101,40 @@ export function ChatInterface({ avatarId, voiceId, resumeSessionId, onSessionCre
               )
             })
           )}
-          {/* Live streaming bubble — shows tokens as they arrive */}
+
+          {/* Live streaming bubble */}
           {streamingContent && (
-            <div className="flex gap-2.5 animate-slide-up">
-              <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold
-                              bg-gradient-to-br from-primary-600 to-primary-800">
-                AI
+            <div className="flex gap-3 animate-slide-up">
+              <div className="w-8 h-8 rounded-2xl flex-shrink-0 flex items-center justify-center shadow-md bg-gradient-to-br from-primary-500 to-primary-700">
+                <Bot size={14} className="text-white" />
               </div>
-              <div className="max-w-[85%] flex flex-col gap-1 items-start">
-                <div className="relative px-4 py-2.5 rounded-2xl rounded-tl-sm text-sm leading-relaxed
-                                bg-surface-700/80 border border-primary-500/30 text-gray-200">
-                  {streamingContent}
+              <div className="max-w-[80%] flex flex-col gap-1.5 items-start">
+                <span className="text-[11px] font-medium px-1 text-primary-400">FDCAI</span>
+                <div className="px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed
+                                bg-surface-700/90 border border-primary-500/25 text-gray-100 shadow-sm">
+                  <p className="whitespace-pre-wrap break-words">{streamingContent}</p>
                   <span className="inline-block w-1.5 h-4 bg-primary-400 ml-0.5 align-middle animate-pulse rounded-sm" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Processing indicator */}
+          {isProcessing && !streamingContent && (
+            <div className="flex gap-3 animate-slide-up">
+              <div className="w-8 h-8 rounded-2xl flex-shrink-0 flex items-center justify-center shadow-md bg-gradient-to-br from-primary-500 to-primary-700">
+                <Bot size={14} className="text-white" />
+              </div>
+              <div className="flex flex-col gap-1.5 items-start">
+                <span className="text-[11px] font-medium px-1 text-primary-400">FDCAI</span>
+                <div className="flex items-center gap-3 px-4 py-3 rounded-2xl rounded-tl-sm
+                                bg-surface-700/90 border border-white/10 shadow-sm">
+                  <div className="flex gap-1 items-center">
+                    <span className="w-2 h-2 rounded-full bg-primary-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-2 h-2 rounded-full bg-primary-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-2 h-2 rounded-full bg-primary-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                  <span className="text-xs text-gray-500">{statusMsg || 'Thinking…'}</span>
                 </div>
               </div>
             </div>

@@ -21,6 +21,7 @@ import os
 import pickle
 import subprocess
 import sys
+import tempfile
 import time
 
 import cv2
@@ -160,50 +161,20 @@ def load_models(config: dict):
 # FFmpeg command builder — GPU uses NVENC, CPU falls back to libx264
 # --------------------------------------------------------------------------- #
 
-def build_ffmpeg_cmd(output_path: str, width: int, height: int, fps: int, audio_path: str, use_gpu: bool = False) -> list:
-    """
-    Build the FFmpeg command for video encoding.
-
-    - GPU path: NVENC h264 (h264_nvenc) — fast hardware encoding
-    - CPU path: libx264 software encoding — works everywhere
-    - yuv420p requires even dimensions; caller must ensure width/height are even.
-    - -movflags +faststart makes the output web-streamable before full download.
-    """
+def build_ffmpeg_cmd(frames_pattern: str, audio_path: str, output_path: str, fps: int, use_gpu: bool = False) -> list:
+    """Encode saved PNG frames + audio into MP4. GPU=h264_nvenc, CPU=libx264."""
     if use_gpu:
-        video_codec_args = [
-            "-c:v",    "h264_nvenc",
-            "-gpu",    "0",
-            "-preset", "p4",
-            "-tune",   "hq",
-            "-rc",     "vbr",
-            "-cq",     "23",
-            "-b:v",    "0",
-        ]
+        video_codec_args = ["-c:v", "h264_nvenc", "-preset", "p4", "-cq", "23"]
     else:
-        video_codec_args = [
-            "-c:v",    "libx264",
-            "-preset", "fast",
-            "-crf",    "23",
-        ]
+        video_codec_args = ["-c:v", "libx264", "-preset", "fast", "-crf", "23"]
 
     return [
-        "/usr/local/bin/ffmpeg", "-y",
-        "-v", "error",
-        # ---- input: raw BGR frames piped from Python ----
-        "-f",       "rawvideo",
-        "-pix_fmt", "bgr24",
-        "-s",       f"{width}x{height}",
-        "-r",       str(fps),
-        "-i",       "-",
-        # ---- input: audio file ----
-        "-i",       audio_path,
-        # ---- video encoding ----
+        "ffmpeg", "-y", "-v", "warning",
+        "-r", str(fps), "-i", frames_pattern,
+        "-i", audio_path,
         *video_codec_args,
         "-pix_fmt", "yuv420p",
-        # ---- audio encoding ----
-        "-c:a",     "aac",
-        "-b:a",     "192k",
-        # ---- muxing ----
+        "-c:a", "aac", "-b:a", "192k",
         "-movflags", "+faststart",
         "-shortest",
         output_path,
@@ -331,22 +302,21 @@ def process_job(job: dict, models: dict) -> dict:
             os.makedirs(out_dir, exist_ok=True)
 
         # ------------------------------------------------------------------ #
-        # 5. Even frame dimensions (yuv420p requirement)
+        # 5. Temp directory for frames
         # ------------------------------------------------------------------ #
+        import shutil
+        frames_dir = os.path.join(tempfile.gettempdir(), f"musetalk_frames_{job_id}")
+        os.makedirs(frames_dir, exist_ok=True)
+
         raw_h, raw_w, _ = frame_list_cycle[0].shape
         width  = raw_w if raw_w % 2 == 0 else raw_w - 1
         height = raw_h if raw_h % 2 == 0 else raw_h - 1
-        if width != raw_w or height != raw_h:
-            log.debug("[%s] dimensions adjusted %dx%d → %dx%d for yuv420p", job_id, raw_w, raw_h, width, height)
-        log.info("[%s] output frame size: %dx%d @ %d fps  |  encoder: %s",
-                 job_id, width, height, fps, "h264_nvenc" if use_gpu else "libx264")
+        log.info("[%s] output: %dx%d @ %d fps  |  encoder: %s  |  frames_dir: %s",
+                 job_id, width, height, fps, "h264_nvenc" if use_gpu else "libx264", frames_dir)
 
         # ------------------------------------------------------------------ #
-        # 6. Batch inference → pipe directly into FFmpeg
+        # 6. Batch inference → save frames to disk
         # ------------------------------------------------------------------ #
-        cmd = build_ffmpeg_cmd(output_path, width, height, fps, audio_path, use_gpu=use_gpu)
-        log.info("[%s] launching FFmpeg: %s", job_id, " ".join(cmd))
-
         gen = datagen(
             whisper_chunks=whisper_chunks,
             vae_encode_latents=latent_list_cycle,
@@ -355,78 +325,55 @@ def process_job(job: dict, models: dict) -> dict:
             device=device,
         )
 
-        process    = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
-        frame_idx  = 0
-        batch_idx  = 0
-        skipped    = 0
-        t_infer    = time.perf_counter()
+        frame_idx = 0
+        batch_idx = 0
+        t_infer   = time.perf_counter()
 
-        log.info("[%s] inference + pipe loop starting  (batch_size=%d)", job_id, batch_size)
+        log.info("[%s] inference loop starting  (batch_size=%d)", job_id, batch_size)
 
-        try:
-            for whisper_batch, latent_batch in gen:
-                whisper_batch       = whisper_batch.to(device)
-                audio_feature_batch = pe(whisper_batch)
-                latent_batch        = latent_batch.to(device=device, dtype=unet.model.dtype)
+        for whisper_batch, latent_batch in gen:
+            whisper_batch       = whisper_batch.to(device)
+            audio_feature_batch = pe(whisper_batch)
+            latent_batch        = latent_batch.to(device=device, dtype=unet.model.dtype)
 
-                pred_latents = unet.model(
-                    latent_batch, timesteps, encoder_hidden_states=audio_feature_batch
-                ).sample
-                recon = vae.decode_latents(pred_latents)
+            pred_latents = unet.model(
+                latent_batch, timesteps, encoder_hidden_states=audio_feature_batch
+            ).sample
+            recon = vae.decode_latents(pred_latents)
 
-                for res_frame in recon:
-                    bbox      = coord_list_cycle[frame_idx % len(coord_list_cycle)]
-                    ori_frame = frame_list_cycle[frame_idx % len(frame_list_cycle)].copy()
-                    x1, y1, x2, y2 = bbox
+            for res_frame in recon:
+                bbox      = coord_list_cycle[frame_idx % len(coord_list_cycle)]
+                ori_frame = frame_list_cycle[frame_idx % len(frame_list_cycle)].copy()
+                x1, y1, x2, y2 = bbox
+                res_frame     = cv2.resize(res_frame.astype(np.uint8), (x2 - x1, y2 - y1))
+                combine_frame = get_image(ori_frame, res_frame, [x1, y1, x2, y2], fp=fp)
+                combine_frame = combine_frame[:height, :width]
+                cv2.imwrite(os.path.join(frames_dir, f"{frame_idx:08d}.png"), combine_frame)
+                frame_idx += 1
 
-                    try:
-                        res_frame     = cv2.resize(res_frame.astype(np.uint8), (x2 - x1, y2 - y1))
-                        combine_frame = get_image(ori_frame, res_frame, [x1, y1, x2, y2], fp=fp)
-                        combine_frame = combine_frame[:height, :width]
-                        process.stdin.write(combine_frame.tobytes())
-                    except Exception as frame_err:
-                        skipped += 1
-                        log.warning("[%s] frame %d skipped: %s", job_id, frame_idx, frame_err)
-
-                    frame_idx += 1
-
-                batch_idx += 1
-                if batch_idx % 10 == 0:
-                    elapsed  = time.perf_counter() - t_infer
-                    fps_real = frame_idx / elapsed if elapsed > 0 else 0
-                    log.info("[%s] batch %d | frames piped: %d | skipped: %d | %.1f fps",
-                             job_id, batch_idx, frame_idx, skipped, fps_real)
-
-        except Exception as e:
-            log.exception("[%s] inference loop failed at frame %d: %s", job_id, frame_idx, e)
-            try:
-                process.stdin.close()
-            except OSError:
-                pass
-            process.kill()
-            process.stderr.read()
-            process.wait()
-            raise
-
-        finally:
-            try:
-                process.stdin.close()
-            except OSError:
-                pass
-            stderr_bytes = process.stderr.read()
-            process.wait()
+            batch_idx += 1
+            if batch_idx % 10 == 0:
+                elapsed = time.perf_counter() - t_infer
+                log.info("[%s] batch %d | frames saved: %d | %.1f fps",
+                         job_id, batch_idx, frame_idx, frame_idx / elapsed if elapsed > 0 else 0)
 
         infer_elapsed = time.perf_counter() - t_infer
-        log.info("[%s] inference done — %d frames piped, %d skipped  (%.2f s, avg %.1f fps)",
-                 job_id, frame_idx, skipped, infer_elapsed, frame_idx / infer_elapsed if infer_elapsed > 0 else 0)
+        log.info("[%s] inference done — %d frames saved  (%.2f s)", job_id, frame_idx, infer_elapsed)
 
-        if process.returncode != 0:
-            ffmpeg_err = stderr_bytes.decode(errors="replace").strip()
-            log.error("[%s] FFmpeg failed (exit %d):\n%s", job_id, process.returncode, ffmpeg_err)
-            return {
-                "status": "error",
-                "msg": f"FFmpeg failure (exit {process.returncode}): {ffmpeg_err}",
-            }
+        # ------------------------------------------------------------------ #
+        # 7. Encode frames → MP4
+        # ------------------------------------------------------------------ #
+        frames_pattern = os.path.join(frames_dir, "%08d.png")
+        cmd = build_ffmpeg_cmd(frames_pattern, audio_path, output_path, fps, use_gpu=use_gpu)
+        log.info("[%s] running FFmpeg: %s", job_id, " ".join(cmd))
+
+        result = subprocess.run(cmd, capture_output=True)
+        shutil.rmtree(frames_dir, ignore_errors=True)
+
+        if result.returncode != 0:
+            err = result.stderr.decode(errors="replace").strip()
+            log.error("[%s] FFmpeg failed (exit %d):\n%s", job_id, result.returncode, err)
+            return {"status": "error", "msg": f"FFmpeg failed: {err}"}
 
         total_elapsed = time.perf_counter() - t_job
         log.info("[%s] job complete — output: %s  (total %.2f s)", job_id, output_path, total_elapsed)
@@ -489,6 +436,7 @@ def main():
         else:
             log.debug("Received job: %.200s", line)
             result = process_job(data, models)
+            result["job_id"] = data.get("job_id", "")  # echo back so backend can match
             log.debug("Job result: %s", result)
             print(json.dumps(result), flush=True)
 

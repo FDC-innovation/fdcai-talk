@@ -1,9 +1,12 @@
+import asyncio
 import logging
+import tempfile
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -235,6 +238,82 @@ async def export_session(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to export session",
         )
+
+
+@router.get("/{session_id}/download-video")
+async def download_session_video(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user),
+):
+    """
+    Merge all video chunks for a session into one MP4 and return it as a download.
+    Uses FFmpeg concat (no re-encoding) so it completes in seconds.
+    """
+    try:
+        result = await db.execute(select(Session).where(Session.id == session_id))
+        session = result.scalar_one_or_none()
+        if not session:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+        if session.user_id != _user_id(current_user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorised")
+
+        # Find all video chunks for this session (local storage path)
+        videos_dir = Path("/app/uploads/videos") / session_id
+        if not videos_dir.exists():
+            raise HTTPException(status_code=404, detail="No videos found for this session")
+
+        chunks = sorted(videos_dir.glob("*.mp4"))
+        if not chunks:
+            raise HTTPException(status_code=404, detail="No video chunks found")
+
+        if len(chunks) == 1:
+            # Only one chunk — return it directly
+            return FileResponse(
+                str(chunks[0]),
+                media_type="video/mp4",
+                filename=f"fdcai-session-{session_id[:8]}.mp4",
+            )
+
+        # Multiple chunks — merge with FFmpeg concat (copy, no re-encode)
+        tmp_dir = Path(tempfile.mkdtemp(prefix="fdcai-merge-"))
+        concat_list = tmp_dir / "list.txt"
+        output_path = tmp_dir / f"merged-{session_id[:8]}.mp4"
+
+        concat_list.write_text(
+            "\n".join(f"file '{str(c)}'" for c in chunks),
+            encoding="utf-8",
+        )
+
+        proc = await asyncio.create_subprocess_exec(
+            "ffmpeg", "-y", "-v", "error",
+            "-f", "concat", "-safe", "0",
+            "-i", str(concat_list),
+            "-c", "copy",
+            str(output_path),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await proc.communicate()
+
+        if proc.returncode != 0:
+            err = stderr.decode(errors="replace").strip()
+            logger.error(f"FFmpeg merge failed for session {session_id}: {err}")
+            raise HTTPException(status_code=500, detail=f"Video merge failed: {err}")
+
+        logger.info(f"Merged {len(chunks)} chunks for session {session_id} → {output_path}")
+        return FileResponse(
+            str(output_path),
+            media_type="video/mp4",
+            filename=f"fdcai-session-{session_id[:8]}.mp4",
+            headers={"Content-Disposition": f'attachment; filename="fdcai-session-{session_id[:8]}.mp4"'},
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to download session video {session_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to merge videos")
 
 
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -5,6 +5,7 @@ import logging
 import os
 import sys
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -159,9 +160,11 @@ class AvatarAnimator:
         async with self._worker_lock:
             proc = await self._ensure_worker()
 
+            job_id = uuid.uuid4().hex[:12]
             job = (
                 json.dumps(
                     {
+                        "job_id": job_id,
                         "image": str(Path(image_path).resolve()),
                         "audio": str(Path(audio_path).resolve()),
                         "output": str(Path(output_path).resolve()),
@@ -184,21 +187,32 @@ class AvatarAnimator:
 
             # GPU: expect ~5-15s per sentence; CPU: up to 30 min
             infer_timeout = 60 if self.device == "cuda" else 1800
-            try:
-                result_line = await asyncio.wait_for(proc.stdout.readline(), timeout=infer_timeout)
-            except asyncio.TimeoutError:
-                proc.kill()
-                self._worker_proc = None
-                raise RuntimeError(f"MuseTalk inference timed out after {infer_timeout}s")
 
-            # Empty read == worker exited mid-job (EOF on stdout). Reset so the
-            # next call respawns instead of erroring on a half-dead process.
-            if not result_line:
-                proc.kill()
-                self._worker_proc = None
-                raise RuntimeError("MuseTalk worker exited before returning a result")
+            # Read stdout responses until we get the one matching our job_id.
+            # Any response with a different job_id is a stale result from a
+            # previous call that finished late — discard it and keep reading.
+            result = None
+            while True:
+                try:
+                    result_line = await asyncio.wait_for(proc.stdout.readline(), timeout=infer_timeout)
+                except asyncio.TimeoutError:
+                    proc.kill()
+                    self._worker_proc = None
+                    raise RuntimeError(f"MuseTalk inference timed out after {infer_timeout}s")
 
-            result = json.loads(result_line.decode().strip())
+                if not result_line:
+                    proc.kill()
+                    self._worker_proc = None
+                    raise RuntimeError("MuseTalk worker exited before returning a result")
+
+                result = json.loads(result_line.decode().strip())
+                if result.get("job_id") == job_id:
+                    break
+                logger.warning(
+                    "Discarding stale worker response for job '%s' (waiting for '%s')",
+                    result.get("job_id"), job_id,
+                )
+
             if result["status"] != "ok":
                 raise RuntimeError(result.get("msg", "Unknown worker error"))
 
