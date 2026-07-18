@@ -56,7 +56,8 @@ async def create_job(
     await db.commit()
     await db.refresh(job)
 
-    celery_app.send_task("run_pipeline_job", args=[job.id])
+    queue = "gpu" if pipeline == "sadtalker" else "cpu"
+    celery_app.send_task("run_pipeline_job", args=[job.id], queue=queue)
 
     logger.info(f"Job created: {job.id} pipeline={pipeline} user={job.user_id}")
     return job
