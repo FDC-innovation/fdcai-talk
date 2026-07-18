@@ -34,7 +34,8 @@ COPY requirements.txt .
 
 # Install Python dependencies (torch is already installed above;
 # make sure requirements.txt doesn't pin a conflicting torch version)
-RUN pip install --no-cache-dir -r requirements.txt
+ENV PIP_DEFAULT_TIMEOUT=120
+RUN pip install --no-cache-dir --retries 10 -r requirements.txt
 
 # Copy application code
 COPY . .
