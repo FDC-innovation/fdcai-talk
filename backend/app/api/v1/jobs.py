@@ -10,6 +10,7 @@ from app.api.v1.users import get_current_user
 from app.database import get_db
 from app.models import Job, User
 from app.schemas import JobCreate, JobResponse
+from app.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -55,7 +56,7 @@ async def create_job(
     await db.commit()
     await db.refresh(job)
 
-    # TODO(step 2): enqueue the Celery task for this pipeline here.
+    celery_app.send_task("run_pipeline_job", args=[job.id])
 
     logger.info(f"Job created: {job.id} pipeline={pipeline} user={job.user_id}")
     return job

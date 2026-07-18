@@ -163,3 +163,47 @@ def cleanup_old_files_task():
     except Exception as e:
         logger.error(f"Cleanup task failed: {e}")
         raise
+
+
+@celery_app.task(name="run_pipeline_job", bind=True)
+def run_pipeline_job(self, job_id: str):
+    """Generic job runner (echo loop for now): pending -> running -> done."""
+    import asyncio
+
+    logger.info(f"Starting pipeline job {job_id}")
+
+    async def _run():
+        from app.database import AsyncSessionLocal
+        from app.models import Job
+
+        async with AsyncSessionLocal() as session:
+            job = await session.get(Job, job_id)
+            if job is None:
+                logger.error(f"Job {job_id} not found")
+                return
+
+            try:
+                job.status = "running"
+                job.progress = 0
+                await session.commit()
+
+                for pct in (25, 50, 75):
+                    await asyncio.sleep(3)
+                    job.progress = pct
+                    await session.commit()
+
+                job.status = "done"
+                job.progress = 100
+                job.output = {"echo": job.params}
+                await session.commit()
+                logger.info(f"Pipeline job {job_id} done")
+            except Exception as e:
+                logger.error(f"Pipeline job {job_id} failed: {e}")
+                job.status = "failed"
+                job.error = str(e)
+                await session.commit()
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(_run())
+    loop.close()
