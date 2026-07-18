@@ -12,7 +12,7 @@ from jose import JWTError, jwt
 from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy import select, text
 
-from app.api.v1 import avatars, conversations, messages, sessions, users, voices
+from app.api.v1 import avatars, conversations, jobs, messages, sessions, users, voices
 from app.config import settings
 from app.database import AsyncSessionLocal, Base, engine
 from app.logging_config import configure_logging
@@ -156,6 +156,7 @@ app.include_router(sessions.router, prefix="/api/v1/sessions", tags=["sessions"]
 app.include_router(conversations.router, prefix="/api/v1/conversations", tags=["conversations"])
 app.include_router(messages.router, prefix="/api/v1/messages", tags=["messages"])
 app.include_router(voices.router, prefix="/api/v1/voices", tags=["voices"])
+app.include_router(jobs.router, prefix="/api/v1/jobs", tags=["jobs"])
 
 
 @app.exception_handler(Exception)
