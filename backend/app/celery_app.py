@@ -206,8 +206,14 @@ def run_pipeline_job(self, job_id: str):
                     clips = await detect_clips(
                         r["words"], r["text"], params.get("instructions")
                     )
+                    job.progress = 60
+                    await session.commit()
+                    from app.services.clip_cutter import cut_clips
+                    cut_results = cut_clips(media_path, clips, str(job.id))
+                    job.progress = 90
+                    await session.commit()
                     job.output = {
-                        "clips": clips,
+                        "clips": cut_results,
                         "transcript": r["text"],
                         "duration": r["duration"],
                     }
