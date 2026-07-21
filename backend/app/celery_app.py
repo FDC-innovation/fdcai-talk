@@ -243,6 +243,19 @@ def run_pipeline_job(self, job_id: str):
                         "transcript": r["text"],
                         "duration": r["duration"],
                     }
+                elif job.pipeline == "sadtalker":
+                    from app.services.sadtalker_engine import generate_avatar
+                    params = job.params or {}
+                    image_url = params.get("image_url")
+                    audio_url = params.get("audio_url")
+                    if not image_url or not audio_url:
+                        raise ValueError("sadtalker job requires params.image_url and params.audio_url")
+                    job.progress = 10
+                    await session.commit()
+                    result = await generate_avatar(image_url, audio_url, str(job.id))
+                    job.progress = 90
+                    await session.commit()
+                    job.output = result
                 else:
                     for pct in (25, 50, 75):
                         await asyncio.sleep(3)

@@ -304,8 +304,37 @@ services:
       - avatar-network
     restart: unless-stopped
 
+  sadtalker:
+    build:
+      context: ./services/sadtalker
+      dockerfile: Dockerfile.gpu
+    image: fdcai-talk-sadtalker
+    container_name: avatar-sadtalker
+    profiles: [gpu]
+    ports:
+      - "5003:5003"
+    volumes:
+      - sadtalker_models:/app/checkpoints
+    networks:
+      - avatar-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5003/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
 volumes:
   ollama_models:
+  sadtalker_models:
   postgres_data:
     driver: local
   redis_data:
