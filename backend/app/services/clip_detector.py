@@ -107,13 +107,25 @@ def snap_to_sentences(start: float, end: float, sentences: List[dict]) -> Tuple[
 
 
 def parse_clips_json(text: str) -> List[dict]:
+    from app.services.llm_json import parse_llm_json_array
+    # LLM may return {"clips":[...]} or just [...] — handle both
     text = text.replace("```json", "").replace("```", "").strip()
+    if text.find("[") != -1 and (text.find("[") < text.find("{") or text.find("{") == -1):
+        return parse_llm_json_array(text, context="clip_detector")
     start_idx = text.find("{")
     if start_idx == -1:
-        raise ValueError("No JSON object found in model output")
-    data, _ = json.JSONDecoder().raw_decode(text[start_idx:])
-    return data.get("clips", [])
+        raise ValueError("No JSON found in clip detector output")
+    try:
+        data, _ = json.JSONDecoder().raw_decode(text[start_idx:])
+        if isinstance(data, dict):
+            return data.get("clips", [])
+        return data if isinstance(data, list) else []
+    except Exception:
+        return parse_llm_json_array(text, context="clip_detector_fallback")
 
+
+MIN_MEDIA_DURATION = 10.0  # seconds — below this, skip LLM detection
+MIN_WORDS_FOR_DETECTION = 5  # fewer words = nothing meaningful to detect
 
 async def detect_clips(
     words: List[Dict[str, Any]],
@@ -132,6 +144,12 @@ async def detect_clips(
 
     sentences = build_sentences(words)
     total_duration = sentences[-1]["end"]
+    if total_duration < MIN_MEDIA_DURATION:
+        logger.warning(f"detect_clips: media too short ({total_duration:.1f}s < {MIN_MEDIA_DURATION}s) — returning empty")
+        return []
+    if len(words) < MIN_WORDS_FOR_DETECTION:
+        logger.warning(f"detect_clips: too few words ({len(words)}) — returning empty")
+        return []
     chunks = chunk_sentences(sentences)
     logger.info(
         f"detect_clips: {len(sentences)} sentences, {len(chunks)} chunks, "

@@ -165,9 +165,9 @@ def cleanup_old_files_task():
         raise
 
 
-@celery_app.task(name="run_pipeline_job", bind=True)
+@celery_app.task(name="run_pipeline_job", bind=True, max_retries=3)
 def run_pipeline_job(self, job_id: str):
-    """Generic job runner (echo loop for now): pending -> running -> done."""
+    """Pipeline job runner: pending -> running -> done/failed. Retries up to 3x on transient errors."""
     import asyncio
 
     logger.info(f"Starting pipeline job {job_id}")
@@ -268,10 +268,18 @@ def run_pipeline_job(self, job_id: str):
                 await session.commit()
                 logger.info(f"Pipeline job {job_id} done")
             except Exception as e:
-                logger.error(f"Pipeline job {job_id} failed: {e}")
-                job.status = "failed"
-                job.error = str(e)
-                await session.commit()
+                logger.error(f"Pipeline job {job_id} failed (attempt {self.request.retries+1}): {e}")
+                is_hard_error = isinstance(e, (ValueError, FileNotFoundError))
+                if is_hard_error or self.request.retries >= self.max_retries:
+                    job.status = "failed"
+                    job.error = str(e)
+                    await session.commit()
+                else:
+                    job.status = "pending"
+                    job.progress = 0
+                    job.error = f"Retrying ({self.request.retries+1}/{self.max_retries}): {e}"
+                    await session.commit()
+                    raise self.retry(exc=e, countdown=30 * (self.request.retries + 1))
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)

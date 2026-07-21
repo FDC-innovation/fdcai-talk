@@ -32,6 +32,9 @@ def parse_chapter_count(text):
 
 
 async def detect_chapters(transcript: str, duration: float, instructions=None) -> list:
+    if duration < 30.0:
+        logger.warning(f"detect_chapters: media too short ({duration:.1f}s < 30s) — returning single chapter")
+        return [{"title": "Full Video", "subtitle": "Complete recording", "start_seconds": 0.0, "end_seconds": duration}]
     words = transcript.split()
     if len(words) > 3000:
         transcript = " ".join(words[:3000])
@@ -55,12 +58,8 @@ async def detect_chapters(transcript: str, duration: float, instructions=None) -
         messages=[{"role": "user", "content": prompt}],
         system_prompt=SYSTEM_PROMPT, thinking=False,
     )
-    raw = re.sub(r"^```(?:json)?", "", raw.strip()).strip()
-    raw = re.sub(r"```$", "", raw).strip()
-    start = raw.find("[")
-    if start == -1:
-        raise ValueError(f"No JSON array in LLM chapters response: {raw[:200]}")
-    chapters = json.JSONDecoder().raw_decode(raw[start:])[0]
+    from app.services.llm_json import parse_llm_json_array
+    chapters = parse_llm_json_array(raw, context="podcast_chapters")
     chapters.sort(key=lambda c: float(c.get("start_seconds", 0)))
     for i in range(len(chapters) - 1):
         chapters[i]["end_seconds"] = chapters[i + 1]["start_seconds"]
