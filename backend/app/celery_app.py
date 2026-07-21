@@ -217,6 +217,32 @@ def run_pipeline_job(self, job_id: str):
                         "transcript": r["text"],
                         "duration": r["duration"],
                     }
+                elif job.pipeline == "podcast":
+                    from app.services.stt import stt_service
+                    from app.services.podcast_pipeline import detect_chapters, render_podcast
+                    params = job.params or {}
+                    media_path = params.get("media_path")
+                    if not media_path:
+                        raise ValueError("podcast job requires params.media_path")
+                    job.progress = 10
+                    await session.commit()
+                    r = await stt_service.transcribe_with_words(media_path)
+                    job.progress = 40
+                    await session.commit()
+                    chapters = await detect_chapters(
+                        r["text"], r["duration"], params.get("instructions")
+                    )
+                    job.progress = 60
+                    await session.commit()
+                    result = render_podcast(media_path, chapters, r["words"], str(job.id))
+                    job.progress = 90
+                    await session.commit()
+                    job.output = {
+                        "chapters": result["chapters"],
+                        "final_video": result["final_video"],
+                        "transcript": r["text"],
+                        "duration": r["duration"],
+                    }
                 else:
                     for pct in (25, 50, 75):
                         await asyncio.sleep(3)
