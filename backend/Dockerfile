@@ -16,6 +16,8 @@ RUN apt-get update && apt-get install -y \
     git \
     wget \
     curl \
+    fonts-dejavu-core \
+    libass9 \
     && rm -rf /var/lib/apt/lists/* \
     && ln -sf python3.10 /usr/bin/python3 \
     && ln -sf python3 /usr/bin/python \
