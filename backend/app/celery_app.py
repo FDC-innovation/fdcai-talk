@@ -187,14 +187,39 @@ def run_pipeline_job(self, job_id: str):
                 job.progress = 0
                 await session.commit()
 
-                for pct in (25, 50, 75):
-                    await asyncio.sleep(3)
-                    job.progress = pct
+                if job.pipeline == "clips":
+                    from app.services.clip_detector import detect_clips
+                    from app.services.stt import stt_service
+
+                    params = job.params or {}
+                    media_path = params.get("media_path")
+                    if not media_path:
+                        raise ValueError("clips job requires params.media_path")
+
+                    job.progress = 10
                     await session.commit()
+
+                    r = await stt_service.transcribe_with_words(media_path)
+                    job.progress = 50
+                    await session.commit()
+
+                    clips = await detect_clips(
+                        r["words"], r["text"], params.get("instructions")
+                    )
+                    job.output = {
+                        "clips": clips,
+                        "transcript": r["text"],
+                        "duration": r["duration"],
+                    }
+                else:
+                    for pct in (25, 50, 75):
+                        await asyncio.sleep(3)
+                        job.progress = pct
+                        await session.commit()
+                    job.output = {"echo": job.params}
 
                 job.status = "done"
                 job.progress = 100
-                job.output = {"echo": job.params}
                 await session.commit()
                 logger.info(f"Pipeline job {job_id} done")
             except Exception as e:
