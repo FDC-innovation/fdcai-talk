@@ -10,6 +10,7 @@ import { AuthModal } from '@/components/AuthModal'
 import { api } from '@/lib/api'
 import { toast } from 'react-hot-toast'
 import { useStore } from '@/store/useStore'
+import { StudioPanel } from '@/components/StudioPanel'
 
 // Heavy panels (chat WebSocket pipeline, voice cloning recorder, history
 // list with TanStack queries, settings form) load on-demand instead of
@@ -54,6 +55,7 @@ import {
   Brain,
   AudioWaveform,
   History,
+  Clapperboard,
   Settings,
 } from 'lucide-react'
 
@@ -109,7 +111,7 @@ const STATS = [
   { value: '100%', label: 'Self-hostable' },
 ]
 
-type View = 'home' | 'avatars' | 'chat' | 'voice' | 'history' | 'settings'
+type View = 'home' | 'avatars' | 'chat' | 'voice' | 'history' | 'studio' | 'settings'
 
 export default function Home() {
   const { isAuthenticated, user, clearAuth } = useStore()
@@ -159,6 +161,7 @@ export default function Home() {
     { id: 'voice', icon: Mic2, label: 'Voice' },
     { id: 'chat', icon: MessageCircle, label: 'Chat', disabled: !selectedAvatar },
     { id: 'history', icon: History, label: 'History' },
+    { id: 'studio', icon: Clapperboard, label: 'Studio' },
     { id: 'settings', icon: Settings, label: 'Settings' },
   ]
 
@@ -378,6 +381,11 @@ export default function Home() {
               Go to Avatar Studio
             </button>
           </div>
+        )}
+
+        {/* ── STUDIO VIEW ── */}
+        {view === 'studio' && (
+          <StudioPanel />
         )}
 
         {/* ── HISTORY VIEW ── */}

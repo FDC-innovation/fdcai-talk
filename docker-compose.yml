@@ -126,7 +126,6 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
-      - /app/.next
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:3000 || exit 1"]
       interval: 15s
@@ -142,7 +141,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: avatar-celery-worker
-    command: celery -A app.celery_app worker --loglevel=info --concurrency=2 -Q cpu,celery
+    command: celery -A app.celery_app worker --loglevel=info --pool=solo -Q cpu,celery
     environment:
       - DATABASE_URL=postgresql://${DATABASE_USER:-avatar_user}:${DATABASE_PASSWORD:-change_this_password}@postgres:5432/${DATABASE_NAME:-avatar_db}
       - REDIS_URL=redis://redis:6379/0

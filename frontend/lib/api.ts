@@ -269,6 +269,34 @@ export const api = {
     return response.data as Blob
   },
 
+
+  // Jobs (Studio pipeline)
+  uploadMedia: async (file: File, onProgress?: (pct: number) => void) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await apiClient.post('/api/v1/jobs/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) onProgress(Math.round((e.loaded * 100) / e.total))
+      },
+    })
+    return response.data as { media_path: string; filename: string; size_bytes: number }
+  },
+
+  createJob: async (pipeline: 'clips' | 'podcast' | 'sadtalker', params: Record<string, string>) => {
+    const response = await apiClient.post(`/api/v1/jobs/${pipeline}`, { params })
+    return { job_id: response.data.id, status: response.data.status }
+  },
+
+  getJob: async (jobId: string) => {
+    const response = await apiClient.get(`/api/v1/jobs/${jobId}`)
+    const d = response.data; return { job_id: d.id, status: d.status, pipeline: d.pipeline, output: d.output ?? {}, error: d.error }
+  },
+
+  getJobDownloadUrl: (jobId: string, artifact: string) =>
+    `${API_URL}/api/v1/jobs/${jobId}/download/${artifact}`,
+
+
   // Health
   getHealth: async () => {
     const response = await apiClient.get('/health')

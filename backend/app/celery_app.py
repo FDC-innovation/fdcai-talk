@@ -208,7 +208,9 @@ def run_pipeline_job(self, job_id: str):
                     await session.commit()
                     raise self.retry(exc=e, countdown=30 * (self.request.retries + 1))
 
+    from app.database import engine
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
+    loop.run_until_complete(engine.dispose())
     loop.run_until_complete(_run())
     loop.close()
