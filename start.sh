@@ -238,7 +238,7 @@ if [[ "$MODE" == "docker" ]]; then
   info "This may take a few minutes on first run (downloading images + building)..."
   echo ""
 
-  $DC up -d --build
+  $DC up -d --build --remove-orphans
 
   step "Waiting for services to be healthy"
   echo -n "  Postgres "
