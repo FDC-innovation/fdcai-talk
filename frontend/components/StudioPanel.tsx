@@ -17,7 +17,7 @@ import {
   RefreshCw,
 } from 'lucide-react'
 
-type Pipeline = 'clips' | 'podcast' | 'sadtalker'
+type Pipeline = 'clips' | 'podcast' | 'talking-head'
 type JobStatus = 'idle' | 'uploading' | 'pending' | 'processing' | 'done' | 'failed'
 
 interface JobResult {
@@ -44,9 +44,9 @@ const PIPELINES: { id: Pipeline; icon: typeof Scissors; label: string; desc: str
     color: 'from-blue-500 to-cyan-500',
   },
   {
-    id: 'sadtalker',
+    id: 'talking-head',
     icon: Bot,
-    label: 'SadTalker',
+    label: 'Talking Head',
     desc: 'Animate a face photo with an audio file (GPU required).',
     color: 'from-emerald-500 to-teal-500',
   },
@@ -161,9 +161,9 @@ export function StudioPanel() {
 
     let params: Record<string, string> = {}
 
-    if (pipeline === 'sadtalker') {
+    if (pipeline === 'talking-head') {
       if (!imageUrl.trim() || !audioUrl.trim()) {
-        toast('SadTalker needs an image URL and audio URL', { icon: '⚠️' })
+        toast('Talking Head needs an image URL and audio URL', { icon: '⚠️' })
         return
       }
       params = { image_url: imageUrl.trim(), audio_url: audioUrl.trim() }
@@ -222,7 +222,7 @@ export function StudioPanel() {
         })
       }
       downloads.push({ label: 'Final Video', url: api.getJobDownloadUrl(jobResult.job_id, 'final') })
-    } else if (pipeline === 'sadtalker') {
+    } else if (pipeline === 'talking-head') {
       downloads.push({ label: 'Animated Video', url: api.getJobDownloadUrl(jobResult.job_id, 'final') })
     }
   }
@@ -277,7 +277,7 @@ export function StudioPanel() {
         <div className="mb-6 animate-fade-in">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">2 · Provide input</p>
 
-          {pipeline === 'sadtalker' ? (
+          {pipeline === 'talking-head' ? (
             <div className="space-y-3">
               <input
                 type="url"

@@ -170,13 +170,13 @@ def run_pipeline_job(self, job_id: str):
                         "transcript": r["text"],
                         "duration": r["duration"],
                     }
-                elif job.pipeline == "sadtalker":
+                elif job.pipeline == "talking-head":
                     from app.services.sadtalker_engine import generate_avatar
                     params = job.params or {}
                     image_url = params.get("image_url")
                     audio_url = params.get("audio_url")
                     if not image_url or not audio_url:
-                        raise ValueError("sadtalker job requires params.image_url and params.audio_url")
+                        raise ValueError("talking-head job requires params.image_url and params.audio_url")
                     job.progress = 10
                     await session.commit()
                     result = await generate_avatar(image_url, audio_url, str(job.id))

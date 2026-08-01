@@ -15,7 +15,7 @@ from app.celery_app import celery_app
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-VALID_PIPELINES = {"clips", "sadtalker", "podcast"}
+VALID_PIPELINES = {"clips", "talking-head", "podcast"}
 
 
 def _user_id(current_user: Optional[User]) -> str:
@@ -113,7 +113,7 @@ async def download_artifact(
     file_path = None
 
     if artifact == "final":
-        # podcast final stitch, sadtalker avatar
+        # podcast final stitch, talking-head avatar
         file_path = output.get("final_video") or output.get("file_path")
     elif artifact.startswith("clip_"):
         idx = int(artifact.split("_")[1])
@@ -167,7 +167,7 @@ async def create_job(
     await db.commit()
     await db.refresh(job)
 
-    queue = "gpu" if pipeline == "sadtalker" else "cpu"
+    queue = "gpu" if pipeline == "talking-head" else "cpu"
     celery_app.send_task("run_pipeline_job", args=[job.id], queue=queue)
 
     logger.info(f"Job created: {job.id} pipeline={pipeline} user={job.user_id}")
