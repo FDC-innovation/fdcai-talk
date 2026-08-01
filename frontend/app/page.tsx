@@ -16,21 +16,9 @@ import { StudioPanel } from "@/components/StudioPanel";
 // list with TanStack queries, settings form) load on-demand instead of
 // shipping their JS in the home-page bundle. Cuts the initial chunk size
 // by ~150 KB and lets the marketing landing page paint sooner.
-const ChatInterface = dynamic(() => import("@/components/ChatInterface").then((m) => m.ChatInterface), {
-  ssr: false,
-  loading: () => <PanelLoader label="Connecting…" />,
-});
 const VoicePanel = dynamic(() => import("@/components/VoicePanel").then((m) => m.VoicePanel), {
   ssr: false,
   loading: () => <PanelLoader label="Loading voice studio…" />,
-});
-const HistoryPanel = dynamic(() => import("@/components/HistoryPanel").then((m) => m.HistoryPanel), {
-  ssr: false,
-  loading: () => <PanelLoader label="Loading history…" />,
-});
-const SettingsPanel = dynamic(() => import("@/components/SettingsPanel").then((m) => m.SettingsPanel), {
-  ssr: false,
-  loading: () => <PanelLoader label="Loading settings…" />,
 });
 
 function PanelLoader({ label }: { label: string }) {
@@ -43,7 +31,6 @@ function PanelLoader({ label }: { label: string }) {
 }
 import {
   Camera,
-  MessageCircle,
   Mic2,
   Sparkles,
   Zap,
@@ -54,9 +41,7 @@ import {
   Activity,
   Brain,
   AudioWaveform,
-  History,
   Clapperboard,
-  Settings,
 } from "lucide-react";
 
 const FEATURES = [
@@ -111,7 +96,7 @@ const STATS = [
   { value: "100%", label: "Self-hostable" },
 ];
 
-type View = "home" | "avatars" | "chat" | "voice" | "history" | "studio" | "settings";
+type View = "home" | "avatars" | "voice" | "studio";
 
 export default function Home() {
   const { isAuthenticated, user, clearAuth } = useStore();
@@ -142,27 +127,13 @@ export default function Home() {
     setResumeSessionId(null); // picking an avatar starts a fresh conversation
   };
 
-  const handleStartChat = () => {
-    if (selectedAvatar) {
-      setResumeSessionId(null); // "Start Conversation" = fresh session
-      setView("chat");
-    }
-  };
 
-  const handleResumeFromHistory = (avatarId: string, sessionId: string) => {
-    setSelectedAvatar(avatarId);
-    setResumeSessionId(sessionId); // resume this exact conversation
-    setView("chat");
-  };
 
   const navItems: { id: View; icon: typeof Sparkles; label: string; disabled?: boolean }[] = [
     { id: "home", icon: Sparkles, label: "Home" },
     { id: "avatars", icon: Camera, label: "Avatars" },
     { id: "voice", icon: Mic2, label: "Voice" },
-    { id: "chat", icon: MessageCircle, label: "Chat", disabled: !selectedAvatar },
-    { id: "history", icon: History, label: "History" },
     { id: "studio", icon: Clapperboard, label: "Studio" },
-    { id: "settings", icon: Settings, label: "Settings" },
   ];
 
   return (
@@ -348,9 +319,9 @@ export default function Home() {
             </div>
             {selectedAvatar && (
               <div className="mt-8 flex justify-center">
-                <button onClick={handleStartChat} className="btn-primary text-lg px-10 py-4 rounded-2xl group">
-                  <MessageCircle size={20} />
-                  Start Conversation
+                <button onClick={() => setView("studio")} className="btn-primary text-lg px-10 py-4 rounded-2xl group">
+                  <Clapperboard size={20} />
+                  Open Studio
                   <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
                 </button>
               </div>
@@ -369,41 +340,12 @@ export default function Home() {
           </div>
         )}
 
-        {/* ── CHAT VIEW ── */}
-        {view === "chat" && selectedAvatar && (
-          <div className="max-w-7xl mx-auto px-6 py-10 animate-fade-in">
-            <div className="mb-6">
-              <h1 className="text-3xl font-black gradient-text mb-2">Live Conversation</h1>
-              <p className="text-gray-400">Talk to your AI avatar in real time.</p>
-            </div>
-            <ChatInterface
-              key={`${selectedAvatar}:${resumeSessionId ?? "new"}`}
-              avatarId={selectedAvatar}
-              resumeSessionId={resumeSessionId ?? undefined}
-              onSessionCreated={setActiveSessionId}
-            />
-          </div>
-        )}
 
-        {/* Redirect if no avatar selected for chat */}
-        {view === "chat" && !selectedAvatar && (
-          <div className="max-w-7xl mx-auto px-6 py-10 text-center">
-            <p className="text-gray-400 mb-4">Please select an avatar first.</p>
-            <button onClick={() => setView("avatars")} className="btn-primary">
-              <Camera size={18} />
-              Go to Avatar Studio
-            </button>
-          </div>
-        )}
 
         {/* ── STUDIO VIEW ── */}
         {view === "studio" && <StudioPanel />}
 
-        {/* ── HISTORY VIEW ── */}
-        {view === "history" && <HistoryPanel onResume={handleResumeFromHistory} />}
 
-        {/* ── SETTINGS VIEW ── */}
-        {view === "settings" && <SettingsPanel />}
       </main>
     </div>
   );
