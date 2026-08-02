@@ -206,6 +206,7 @@ export function StudioPanel() {
   const [mediaPath, setMediaPath] = useState<string | null>(null)
   const [mediaName, setMediaName] = useState<string | null>(null)
   const [jobStatus, setJobStatus] = useState<JobStatus>('idle')
+  const [jobProgress, setJobProgress] = useState(0)
   const [jobResult, setJobResult] = useState<JobResult | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -228,6 +229,7 @@ export function StudioPanel() {
           toast.success('Job complete! Download your files below.', { icon: '🎬' })
         } else if (job.status === 'running') {
           setJobStatus('processing')
+          setJobProgress(job.progress ?? 0)
         } else if (job.status === 'failed') {
           stopPolling()
           setJobStatus('failed')
@@ -513,7 +515,7 @@ export function StudioPanel() {
               {isRunning ? (
                 <>
                   <Loader2 size={18} className="animate-spin" />
-                  {jobStatus === 'pending' ? 'Queued…' : 'Processing…'}
+                  {jobStatus === 'pending' ? 'Queued…' : `Processing… ${jobProgress}%`}
                 </>
               ) : (
                 <>

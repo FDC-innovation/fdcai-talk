@@ -290,7 +290,7 @@ export const api = {
 
   getJob: async (jobId: string) => {
     const response = await apiClient.get(`/api/v1/jobs/${jobId}`)
-    const d = response.data; return { job_id: d.id, status: d.status, pipeline: d.pipeline, output: d.output ?? {}, error: d.error }
+    const d = response.data; return { job_id: d.id, status: d.status, pipeline: d.pipeline, progress: d.progress ?? 0, output: d.output ?? {}, error: d.error }
   },
 
   getJobDownloadUrl: (jobId: string, artifact: string) =>

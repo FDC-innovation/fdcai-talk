@@ -114,43 +114,6 @@ def add_silent_audio(video_path, output_path):
           "-movflags", "+faststart", output_path], "Add silent audio")
 
 
-def words_to_srt(words, start_offset, clip_duration):
-    clip_words = [w for w in words
-                  if w["end"] > start_offset and w["start"] < start_offset + clip_duration + 1.0]
-    if not clip_words:
-        return ""
-
-    def fmt(t):
-        t = max(0.0, t)
-        h = int(t // 3600); m = int((t % 3600) // 60)
-        s = int(t % 60); ms = int((t % 1) * 1000)
-        return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
-
-    lines, group, idx = [], [], 1
-    for w in clip_words:
-        group.append(w)
-        if len(group) >= 5:
-            text = " ".join(g["word"] for g in group)
-            lines.append(f"{idx}\n{fmt(group[0]['start']-start_offset)} --> {fmt(group[-1]['end']-start_offset)}\n{text}\n")
-            idx += 1; group = []
-    if group:
-        text = " ".join(g["word"] for g in group)
-        lines.append(f"{idx}\n{fmt(group[0]['start']-start_offset)} --> {fmt(group[-1]['end']-start_offset)}\n{text}\n")
-    return "\n".join(lines)
-
-
-def burn_srt(video_path, srt_path, output_path):
-    font_dir = os.path.dirname(FONT_PATH)
-    sub_filter = (f"subtitles={srt_path}:fontsdir={font_dir}"
-                  ":force_style='FontSize=28,PrimaryColour=&H00FFFF00,"
-                  "OutlineColour=&H00000000,Outline=2,Bold=1,Alignment=2,MarginV=40'")
-    _run(["ffmpeg", "-y", "-i", video_path, "-vf", sub_filter,
-          "-c:v", "libx264", "-preset", "fast", "-crf", "18",
-          "-profile:v", "baseline", "-level", "3.0", "-pix_fmt", "yuv420p",
-          "-c:a", "aac", "-avoid_negative_ts", "make_zero",
-          "-movflags", "+faststart", output_path], "Burn SRT")
-
-
 def concat_files(paths, output_path, tmp_dir):
     list_file = os.path.join(tmp_dir, "concat.txt")
     with open(list_file, "w") as f:
@@ -166,7 +129,7 @@ def concat_files(paths, output_path, tmp_dir):
 def render_podcast(media_path, chapters, words, job_id):
     job_dir = os.path.join(OUTPUT_DIR, job_id)
     os.makedirs(job_dir, exist_ok=True)
-    cut_results = cut_clips(media_path, chapters, job_id, output_dir=job_dir)
+    cut_results = cut_clips(media_path, chapters, job_id, words=words, output_dir=job_dir, vertical=False)
     rendered, rendered_paths = [], []
     for i, clip in enumerate(cut_results):
         if clip.get("status") != "done":
@@ -182,14 +145,8 @@ def render_podcast(media_path, chapters, words, job_id):
             card_audio = os.path.join(tmp_dir, "card_audio.mp4")
             add_silent_audio(card_raw, card_audio)
             captioned = os.path.join(tmp_dir, "captioned.mp4")
-            srt_text = words_to_srt(words, float(clip.get("start_seconds", 0)), clip_dur) if words else ""
-            if srt_text.strip():
-                srt_path = os.path.join(tmp_dir, "chapter.srt")
-                with open(srt_path, "w", encoding="utf-8") as f:
-                    f.write(srt_text)
-                burn_srt(clip_path, srt_path, captioned)
-            else:
-                shutil.copy2(clip_path, captioned)
+            # Body from cut_clips is already captioned (same path as clips) — just use it.
+            shutil.copy2(clip_path, captioned)
             chapter_out = os.path.join(job_dir, f"chapter_{i:02d}.mp4")
             concat_files([card_audio, captioned], chapter_out, tmp_dir)
             rendered.append({**clip, "rendered_path": chapter_out, "status": "done"})

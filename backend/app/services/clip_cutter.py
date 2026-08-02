@@ -36,7 +36,8 @@ def _srt_ts(t: float) -> str:
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 
-def _group_caption_lines(words: list, start: float, end: float, max_words: int = 5):
+def _group_caption_lines(words: list, start: float, end: float, max_words: int = 5, origin: float = None):
+    base = start if origin is None else origin
     in_range = []
     for w in words or []:
         try:
@@ -47,8 +48,8 @@ def _group_caption_lines(words: list, start: float, end: float, max_words: int =
             continue
         in_range.append({
             "word": str(w.get("word", "")).strip(),
-            "start": max(0.0, ws - start),
-            "end": max(0.0, we - start),
+            "start": max(0.0, ws - base),
+            "end": max(0.0, we - base),
         })
     lines = []
     for i in range(0, len(in_range), max_words):
@@ -61,8 +62,8 @@ def _group_caption_lines(words: list, start: float, end: float, max_words: int =
     return lines
 
 
-def _write_srt(words: list, start: float, end: float, path: str) -> bool:
-    lines = _group_caption_lines(words, start, end)
+def _write_srt(words: list, start: float, end: float, path: str, origin: float = None) -> bool:
+    lines = _group_caption_lines(words, start, end, origin=origin)
     if not lines:
         return False
     with open(path, "w", encoding="utf-8") as f:
@@ -76,7 +77,7 @@ def _esc_drawtext(text: str) -> str:
     return text
 
 
-def _make_card(text: str, subtitle: str, out_path: str, job_id: str) -> bool:
+def _make_card(text: str, subtitle: str, out_path: str, job_id: str, vertical: bool = True) -> bool:
     main = _esc_drawtext(text)[:60]
     sub = _esc_drawtext(subtitle)[:80] if subtitle else ""
     draw = (
@@ -90,7 +91,7 @@ def _make_card(text: str, subtitle: str, out_path: str, job_id: str) -> bool:
         )
     cmd = [
         "ffmpeg", "-y",
-        "-f", "lavfi", "-i", f"color=c=black:s=1080x1920:d={CARD_SECONDS}:r=30",
+        "-f", "lavfi", "-i", f"color=c=black:s={'1080x1920' if vertical else '1920x1080'}:d={CARD_SECONDS}:r=30",
         "-f", "lavfi", "-i", f"anullsrc=channel_layout=stereo:sample_rate=44100",
         "-vf", draw,
         "-t", str(CARD_SECONDS),
@@ -129,7 +130,7 @@ def _concat(parts: list, out_path: str, job_id: str) -> bool:
 
 
 def cut_clips(media_path: str, clips: list, job_id: str, words: list = None,
-              output_dir: str = OUTPUT_DIR) -> list:
+              output_dir: str = OUTPUT_DIR, vertical: bool = True) -> list:
     os.makedirs(output_dir, exist_ok=True)
     results = []
     for i, clip in enumerate(clips):
@@ -144,14 +145,25 @@ def cut_clips(media_path: str, clips: list, job_id: str, words: list = None,
 
         # Layout: 1080x1920 canvas, video centered, captions in bottom black bar.
         # ASS Fontsize is in PlayRes units (1920 tall) -> use ~64 for large readable text.
-        vf = ("scale=1080:-2,"
-              "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1")
-        has_srt = _write_srt(words, start, end, srt_path)
+        if vertical:
+            vf = ("scale=1080:-2,"
+                  "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1")
+        else:
+            vf = ("scale=1920:-2,"
+                  "pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1")
+        _coarse = max(0, start - 5)
+        has_srt = _write_srt(words, start, end, srt_path, origin=_coarse)
         if has_srt:
-            style = ("FontName=DejaVu Sans,Fontsize=64,Bold=1,"
-                     "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
-                     "BorderStyle=1,Outline=4,Shadow=1,Alignment=2,MarginV=420,"
-                     "PlayResX=1080,PlayResY=1920")
+            if vertical:
+                style = ("FontName=DejaVu Sans,Fontsize=64,Bold=1,"
+                         "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
+                         "BorderStyle=1,Outline=4,Shadow=1,Alignment=2,MarginV=420,"
+                         "PlayResX=1080,PlayResY=1920")
+            else:
+                style = ("FontName=DejaVu Sans,Fontsize=64,Bold=1,"
+                         "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
+                         "BorderStyle=1,Outline=4,Shadow=1,Alignment=2,MarginV=60,"
+                         "PlayResX=1920,PlayResY=1080")
             vf += f",subtitles='{srt_path}':force_style='{style}'"
 
         coarse = max(0, start - 5)
@@ -177,10 +189,10 @@ def cut_clips(media_path: str, clips: list, job_id: str, words: list = None,
             title_card = os.path.join(output_dir, f"{base}_title.mp4")
             outro_card = os.path.join(output_dir, f"{base}_outro.mp4")
             parts = []
-            if _make_card(title, clip.get("reason", ""), title_card, job_id):
+            if _make_card(title, clip.get("reason", ""), title_card, job_id, vertical):
                 parts.append(title_card)
             parts.append(body_path)
-            if _make_card(WATERMARK_TEXT, "AI-generated highlight", outro_card, job_id):
+            if _make_card(WATERMARK_TEXT, "AI-generated highlight", outro_card, job_id, vertical):
                 parts.append(outro_card)
 
             final_ok = False
