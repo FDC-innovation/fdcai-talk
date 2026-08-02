@@ -117,6 +117,8 @@ class LLMService:
             self.client = openai.AsyncOpenAI(
                 api_key=settings.OPENAI_API_KEY or "ollama",
                 base_url=base_url,
+                timeout=1800.0,  # 30 min: local CPU inference (8b) is slow
+                max_retries=0,   # don't silently retry a 20-min call
             )
             self.provider = "openai"  # downstream code paths are identical
             logger.info(f"LLM provider 'ollama' → OpenAI-compatible client at {base_url}")

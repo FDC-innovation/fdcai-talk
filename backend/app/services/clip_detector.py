@@ -174,11 +174,18 @@ async def detect_clips(
             f"USER INSTRUCTIONS (follow exactly):\n{user_instructions}\n\n"
             f"TIMING RULES:\n{timing_block}\n\n"
             f"Transcript segment:\n{chunk_text}\n\n"
-            f"Return ONLY valid JSON - do NOT copy the example values, write real titles "
-            f"and timestamps based on the transcript content:\n"
-            '{\n  "clips": [\n    {\n      "title": "<write a real punchy title here, max 6 words>",\n'
+            f"TITLE RULES: Write a SPECIFIC title using actual names, places, or topics "
+            f"from the transcript. Max 6 words. NEVER use generic words like 'Key Moment', "
+            f"'Best Segment', 'Important Part', or 'Highlight'.\n"
+            f"REASON RULES: State the concrete hook in 8-15 words. NEVER say 'best available "
+            f"segment' or 'engaging moment'. Name what actually happens.\n\n"
+            f"GOOD example title: 'Raised by IAS officer parents' | GOOD reason: 'Reveals an "
+            f"unusual family background that builds instant credibility'\n"
+            f"BAD title: 'Key Moment' | BAD reason: 'Best available segment'\n\n"
+            f"Return ONLY valid JSON based on THIS transcript's content:\n"
+            '{\n  "clips": [\n    {\n      "title": "<specific title with real details>",\n'
             '      "start_seconds": <number>,\n      "end_seconds": <number>,\n'
-            '      "reason": "<why this works as a standalone clip>"\n    }\n  ]\n}'
+            '      "reason": "<concrete hook, 8-15 words>"\n    }\n  ]\n}'
         )
 
         for attempt in range(2):

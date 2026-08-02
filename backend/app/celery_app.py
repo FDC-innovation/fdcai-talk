@@ -136,7 +136,7 @@ def run_pipeline_job(self, job_id: str):
                     job.progress = 60
                     await session.commit()
                     from app.services.clip_cutter import cut_clips
-                    cut_results = cut_clips(media_path, clips, str(job.id))
+                    cut_results = cut_clips(media_path, clips, str(job.id), words=r["words"])
                     job.progress = 90
                     await session.commit()
                     job.output = {

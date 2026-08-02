@@ -15,6 +15,8 @@ import {
   DownloadCloud,
   FileVideo,
   Film,
+  Sparkles,
+  Zap,
   Clock,
   FileText,
   ChevronDown,
@@ -95,6 +97,7 @@ function fmtTime(sec?: number): string {
 interface PreviewItem {
   title: string
   subtitle?: string
+  reason?: string
   badge?: string
   artifact: string
 }
@@ -117,6 +120,12 @@ function PreviewCard({ item, jobId }: { item: PreviewItem; jobId: string }) {
         <div className="min-w-0">
           <p className="text-sm font-semibold text-gray-100 truncate">{item.title}</p>
           {item.subtitle && <p className="text-xs text-gray-400 truncate">{item.subtitle}</p>}
+          {item.reason && (
+            <p className="text-xs text-primary-300/80 mt-1 flex items-start gap-1">
+              <Sparkles size={11} className="mt-0.5 shrink-0" />
+              <span>{item.reason}</span>
+            </p>
+          )}
         </div>
         <a href={downloadUrl} download className="shrink-0 p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-gray-300" title="Download">
           <Download size={16} />
@@ -158,6 +167,21 @@ async function downloadAll(items: { artifact: string }[], jobId: string) {
   }
 }
 
+function friendlyError(raw?: string): { title: string; hint?: string; raw?: string } {
+  const e = (raw || '').toLowerCase()
+  if (e.includes('word-level timestamps') || e.includes('no clips') || e.includes('no speech')) {
+    return {
+      title: 'No speech detected in this video',
+      hint: 'The Clip Cutter needs spoken audio to find highlights. Try a video with clear talking (a screen recording, interview, or podcast).',
+      raw,
+    }
+  }
+  if (e.includes('timed out')) {
+    return { title: 'Processing timed out', hint: 'The video may be too long for this demo. Try a shorter clip.', raw }
+  }
+  return { title: 'Something went wrong', raw }
+}
+
 function DownloadRow({ label, url }: { label: string; url: string }) {
   return (
     <a
@@ -175,6 +199,7 @@ function DownloadRow({ label, url }: { label: string; url: string }) {
 export function StudioPanel() {
   const [pipeline, setPipeline] = useState<Pipeline | null>(null)
   const [instructions, setInstructions] = useState('')
+  const [model, setModel] = useState('llama3.2:1b')
   const [imageUrl, setImageUrl] = useState('')
   const [audioUrl, setAudioUrl] = useState('')
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -249,6 +274,7 @@ export function StudioPanel() {
       if (!mediaPath) { toast('Upload a media file first', { icon: '⚠️' }); return }
       params = { media_path: mediaPath }
       if (instructions.trim()) params.instructions = instructions.trim()
+      if (pipeline === 'clips') params.model = model
     }
 
     setJobStatus('pending')
@@ -294,6 +320,7 @@ export function StudioPanel() {
         const end = typeof c.end_seconds === 'number' ? c.end_seconds : undefined
         previews.push({
           title: (typeof c.title === 'string' && c.title) || `Clip ${i + 1}`,
+          reason: typeof c.reason === 'string' ? c.reason : undefined,
           badge: start != null && end != null ? `${fmtTime(start)}–${fmtTime(end)}` : undefined,
           artifact: `clip_${i}`,
         })
@@ -450,6 +477,33 @@ export function StudioPanel() {
       {pipeline && (
         <div className="mb-8">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">3 · Run</p>
+          {pipeline === 'clips' && (
+            <div className="mb-4">
+              <p className="text-xs text-gray-500 mb-2">AI model</p>
+              <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
+                <button
+                  onClick={() => setModel('llama3.2:1b')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${
+                    model === 'llama3.2:1b'
+                      ? 'bg-primary-500/20 text-primary-300 border border-primary-500/30'
+                      : 'text-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  <Zap size={14} />
+                  Fast
+                </button>
+                <button
+                  disabled
+                  title="Coming soon"
+                  className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 cursor-not-allowed flex items-center gap-1.5 relative"
+                >
+                  <Sparkles size={14} />
+                  Quality
+                  <span className="text-[9px] uppercase tracking-wide bg-white/10 text-gray-400 px-1.5 py-0.5 rounded-full ml-1">Soon</span>
+                </button>
+              </div>
+            </div>
+          )}
           <div className="flex items-center gap-4">
             <button
               onClick={handleRun}
@@ -507,11 +561,21 @@ export function StudioPanel() {
         </div>
       )}
 
-      {jobStatus === 'failed' && jobResult?.error && (
-        <div className="animate-fade-in p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-sm text-red-300">
-          {jobResult.error}
-        </div>
-      )}
+      {jobStatus === 'failed' && jobResult?.error && (() => {
+        const fe = friendlyError(jobResult.error)
+        return (
+          <div className="animate-fade-in p-4 rounded-xl bg-red-500/10 border border-red-500/20">
+            <p className="text-sm font-semibold text-red-200">{fe.title}</p>
+            {fe.hint && <p className="text-sm text-red-300/80 mt-1">{fe.hint}</p>}
+            {fe.raw && (
+              <details className="mt-2">
+                <summary className="text-xs text-red-400/70 cursor-pointer">Technical details</summary>
+                <p className="text-xs text-red-400/60 mt-1 font-mono break-all">{fe.raw}</p>
+              </details>
+            )}
+          </div>
+        )
+      })()}
     </div>
   )
 }
