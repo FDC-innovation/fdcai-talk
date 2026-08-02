@@ -91,6 +91,7 @@ async def upload_media(
 async def download_artifact(
     job_id: str,
     artifact: str,
+    inline: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user),
 ):
@@ -132,6 +133,8 @@ async def download_artifact(
         raise HTTPException(status_code=404, detail=f"Output file missing on server: {file_path}")
 
     filename = os.path.basename(file_path)
+    if inline:
+        return FileResponse(path=file_path, media_type="video/mp4")
     return FileResponse(
         path=file_path,
         media_type="video/mp4",

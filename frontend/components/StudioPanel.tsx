@@ -12,7 +12,12 @@ import {
   CheckCircle2,
   XCircle,
   Download,
+  DownloadCloud,
   FileVideo,
+  Film,
+  Clock,
+  FileText,
+  ChevronDown,
   ChevronRight,
   RefreshCw,
 } from 'lucide-react'
@@ -78,6 +83,79 @@ function StatusBadge({ status }: { status: JobStatus }) {
       {labels[status]}
     </span>
   )
+}
+
+function fmtTime(sec?: number): string {
+  if (sec == null || isNaN(sec)) return ''
+  const s = Math.floor(sec % 60)
+  const m = Math.floor(sec / 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+interface PreviewItem {
+  title: string
+  subtitle?: string
+  badge?: string
+  artifact: string
+}
+
+function PreviewCard({ item, jobId }: { item: PreviewItem; jobId: string }) {
+  const previewUrl = `${api.getJobDownloadUrl(jobId, item.artifact)}?inline=1`
+  const downloadUrl = api.getJobDownloadUrl(jobId, item.artifact)
+  return (
+    <div className="rounded-xl overflow-hidden bg-white/5 border border-white/10 flex flex-col">
+      <div className="relative bg-black aspect-video">
+        <video src={previewUrl} controls preload="metadata" className="w-full h-full object-contain" />
+        {item.badge && (
+          <span className="absolute top-2 right-2 text-[11px] font-medium px-2 py-0.5 rounded-full bg-black/70 text-gray-200 flex items-center gap-1">
+            <Clock size={10} />
+            {item.badge}
+          </span>
+        )}
+      </div>
+      <div className="p-3 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-gray-100 truncate">{item.title}</p>
+          {item.subtitle && <p className="text-xs text-gray-400 truncate">{item.subtitle}</p>}
+        </div>
+        <a href={downloadUrl} download className="shrink-0 p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-gray-300" title="Download">
+          <Download size={16} />
+        </a>
+      </div>
+    </div>
+  )
+}
+
+function TranscriptSnippet({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  const preview = text.length > 240 ? text.slice(0, 240).trimEnd() + '…' : text
+  return (
+    <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <FileText size={14} className="text-gray-400" />
+        <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Transcript</span>
+      </div>
+      <p className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{open ? text : preview}</p>
+      {text.length > 240 && (
+        <button onClick={() => setOpen((o) => !o)} className="mt-2 inline-flex items-center gap-1 text-xs text-primary-400 hover:text-primary-300 transition-colors">
+          <ChevronDown size={12} className={open ? 'rotate-180 transition-transform' : 'transition-transform'} />
+          {open ? 'Show less' : 'Show full transcript'}
+        </button>
+      )}
+    </div>
+  )
+}
+
+async function downloadAll(items: { artifact: string }[], jobId: string) {
+  for (const it of items) {
+    const a = document.createElement('a')
+    a.href = api.getJobDownloadUrl(jobId, it.artifact)
+    a.download = ''
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    await new Promise((r) => setTimeout(r, 400))
+  }
 }
 
 function DownloadRow({ label, url }: { label: string; url: string }) {
@@ -201,31 +279,48 @@ export function StudioPanel() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  // Build download links from job output
-  const downloads: { label: string; url: string }[] = []
+  // Build rich preview items from job output
+  const previews: PreviewItem[] = []
+  let heroItem: PreviewItem | null = null
+  let transcript = ''
+  let sourceDuration: number | undefined
   if (jobResult?.output && jobResult.status === 'done') {
-    const out = jobResult.output
+    const out = jobResult.output as Record<string, unknown>
+    transcript = typeof out.transcript === 'string' ? out.transcript : ''
+    sourceDuration = typeof out.duration === 'number' ? out.duration : undefined
     if (pipeline === 'clips' && Array.isArray(out.clips)) {
-      out.clips.forEach((_: unknown, i: number) => {
-        downloads.push({
-          label: `Clip ${i + 1}`,
-          url: api.getJobDownloadUrl(jobResult.job_id, `clip_${i}`),
+      (out.clips as Record<string, unknown>[]).forEach((c, i) => {
+        const start = typeof c.start_seconds === 'number' ? c.start_seconds : undefined
+        const end = typeof c.end_seconds === 'number' ? c.end_seconds : undefined
+        previews.push({
+          title: (typeof c.title === 'string' && c.title) || `Clip ${i + 1}`,
+          badge: start != null && end != null ? `${fmtTime(start)}–${fmtTime(end)}` : undefined,
+          artifact: `clip_${i}`,
         })
       })
     } else if (pipeline === 'podcast') {
+      heroItem = { title: 'Final Podcast', subtitle: 'Full stitched video', artifact: 'final' }
       if (Array.isArray(out.chapters)) {
-        out.chapters.forEach((_: unknown, i: number) => {
-          downloads.push({
-            label: `Chapter ${i + 1}`,
-            url: api.getJobDownloadUrl(jobResult.job_id, `chapter_${i}`),
+        (out.chapters as Record<string, unknown>[]).forEach((c, i) => {
+          const start = typeof c.start_seconds === 'number' ? c.start_seconds : undefined
+          const end = typeof c.end_seconds === 'number' ? c.end_seconds : undefined
+          previews.push({
+            title: (typeof c.title === 'string' && c.title) || `Chapter ${i + 1}`,
+            subtitle: typeof c.subtitle === 'string' ? c.subtitle : undefined,
+            badge: start != null && end != null ? `${fmtTime(start)}–${fmtTime(end)}` : undefined,
+            artifact: `chapter_${i}`,
           })
         })
       }
-      downloads.push({ label: 'Final Video', url: api.getJobDownloadUrl(jobResult.job_id, 'final') })
     } else if (pipeline === 'talking-head') {
-      downloads.push({ label: 'Animated Video', url: api.getJobDownloadUrl(jobResult.job_id, 'final') })
+      heroItem = { title: 'Talking Head', subtitle: 'Generated avatar video', artifact: 'final' }
     }
   }
+  const allItems: PreviewItem[] = [...(heroItem ? [heroItem] : []), ...previews]
+  const itemCountLabel =
+    pipeline === 'clips' ? `${previews.length} clip${previews.length === 1 ? '' : 's'}`
+    : pipeline === 'podcast' ? `${previews.length} chapter${previews.length === 1 ? '' : 's'}`
+    : '1 video' 
 
   const isRunning = jobStatus === 'pending' || jobStatus === 'processing'
   const selectedPipeline = PIPELINES.find(p => p.id === pipeline)
@@ -380,14 +475,35 @@ export function StudioPanel() {
       )}
 
       {/* Results */}
-      {jobStatus === 'done' && downloads.length > 0 && (
-        <div className="animate-fade-in">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">4 · Download outputs</p>
-          <div className="space-y-2">
-            {downloads.map(({ label, url }) => (
-              <DownloadRow key={label} label={label} url={url} />
+      {jobStatus === 'done' && allItems.length > 0 && jobResult && (
+        <div className="animate-fade-in space-y-5">
+          <div className="flex items-center justify-between gap-3 flex-wrap p-4 rounded-xl bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/20">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-emerald-500/20">
+                <Film size={18} className="text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-100">Results ready</p>
+                <p className="text-xs text-gray-400">
+                  {itemCountLabel}
+                  {sourceDuration != null && ` · ${fmtTime(sourceDuration)} source`}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => downloadAll(allItems, jobResult.job_id)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-sm font-medium text-gray-100 transition-colors"
+            >
+              <DownloadCloud size={16} />
+              Download all
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {allItems.map((item) => (
+              <PreviewCard key={item.artifact} item={item} jobId={jobResult.job_id} />
             ))}
           </div>
+          {transcript && <TranscriptSnippet text={transcript} />}
         </div>
       )}
 
