@@ -144,6 +144,7 @@ services:
     command: celery -A app.celery_app worker --loglevel=info --pool=solo -Q cpu,celery
     environment:
       - DATABASE_URL=postgresql://${DATABASE_USER:-avatar_user}:${DATABASE_PASSWORD:-change_this_password}@postgres:5432/${DATABASE_NAME:-avatar_db}
+      - SADTALKER_URL=${SADTALKER_URL}
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
@@ -307,10 +308,10 @@ services:
   sadtalker:
     build:
       context: ./services/sadtalker
-      dockerfile: Dockerfile.gpu
+      dockerfile: Dockerfile
     image: fdcai-talk-sadtalker
     container_name: avatar-sadtalker
-    profiles: [gpu]
+    profiles: [cpu-avatar]
     ports:
       - "5003:5003"
     volumes:
