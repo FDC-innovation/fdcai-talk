@@ -153,6 +153,19 @@ class TTSService:
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
         try:
+            # No-GPU escape hatch: on machines without a GPU, Chatterbox will
+            # download ~3GB and then fail to load anyway. Set TTS_FORCE_EDGE=1
+            # to skip straight to the Edge TTS neural fallback (fast, CPU-only,
+            # no cloned voice). Real cloned/Chatterbox voice runs on the GPU box.
+            if os.getenv("TTS_FORCE_EDGE"):
+                logger.info("TTS_FORCE_EDGE set — skipping Chatterbox, using Edge TTS")
+                await self._edge_fallback(text, output_path, language)
+                return SynthResult(
+                    output_path=output_path,
+                    engine="edge-tts",
+                    fallback=True,
+                    voice_cloned=False,
+                )
             if self.model is None:
                 await self.initialize()
 

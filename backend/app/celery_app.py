@@ -217,6 +217,80 @@ def run_pipeline_job(self, job_id: str):
                     job.progress = 90
                     await session.commit()
                     job.output = result
+                elif job.pipeline == "explainer":
+                    # Stage A (video -> section scripts) + Stage B (sections ->
+                    # per-section avatar clips). Deck video arrives as a LOCAL
+                    # media_path (POST /jobs/upload). Avatar image arrives as an
+                    # image_url (avatar upload returns a URL), so download it to
+                    # a local file before Stage B, mirroring the talking-head
+                    # branch. Voice: pass speaker_wav for cloned voice if given.
+                    import os as _os, httpx as _httpx
+                    from app.services.explainer_pipeline import (
+                        video_to_scripts,
+                        sections_to_clips,
+                    )
+                    params = job.params or {}
+                    media_path = params.get("media_path")
+                    image_url = params.get("image_url")
+                    if not media_path or not image_url:
+                        raise ValueError(
+                            "explainer job requires params.media_path and params.image_url"
+                        )
+                    language = params.get("language", "en")
+                    instructions = params.get("instructions")
+                    speaker_wav = params.get("speaker_wav")
+
+                    job.progress = 10
+                    await session.commit()
+                    stage_a = await video_to_scripts(
+                        media_path, language=language, instructions=instructions
+                    )
+                    sections = stage_a.get("sections", [])
+                    if not sections:
+                        raise ValueError(
+                            f"explainer: no sections produced ({stage_a.get('message', 'empty')})"
+                        )
+                    job.progress = 45
+                    await session.commit()
+
+                    _work = f"/tmp/videos/explainer/{job.id}"
+                    _os.makedirs(_work, exist_ok=True)
+                    _img_path = f"{_work}/avatar.png"
+                    # Avatar image_url is a user-facing URL (e.g. localhost:8000).
+                    # Inside the worker container, localhost is the worker itself,
+                    # so rewrite the host to the backend service on the compose
+                    # network before fetching. No-op if already an internal URL.
+                    _fetch_url = (
+                        image_url
+                        .replace("//localhost:8000", "//backend:8000")
+                        .replace("//127.0.0.1:8000", "//backend:8000")
+                    )
+                    async with _httpx.AsyncClient(timeout=120) as _c:
+                        _r = await _c.get(_fetch_url)
+                        if _r.status_code != 200:
+                            raise ValueError(
+                                f"Could not fetch avatar image {image_url} ({_r.status_code})"
+                            )
+                        with open(_img_path, "wb") as _f:
+                            _f.write(_r.content)
+                    job.progress = 55
+                    await session.commit()
+
+                    clips = await sections_to_clips(
+                        sections=sections,
+                        image_path=_img_path,
+                        speaker_wav=speaker_wav,
+                        language=language,
+                        out_dir=f"{_work}/clips",
+                    )
+                    job.progress = 90
+                    await session.commit()
+                    job.output = {
+                        "clips": clips,
+                        "sections": sections,
+                        "transcript": stage_a.get("transcript", ""),
+                        "engine": clips[0]["engine"] if clips else None,
+                    }
                 else:
                     for pct in (25, 50, 75):
                         await asyncio.sleep(3)

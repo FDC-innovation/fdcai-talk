@@ -73,6 +73,7 @@ services:
       - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-2000}
       - TTS_PROVIDER=${TTS_PROVIDER:-chatterbox}
       - AVATAR_ENGINE=${AVATAR_ENGINE:-musetalk}
+      - TTS_FORCE_EDGE=${TTS_FORCE_EDGE:-}
       - WHISPER_MODEL=${WHISPER_MODEL:-small}
       - SECRET_KEY=${SECRET_KEY}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
@@ -159,6 +160,7 @@ services:
       - LLM_MODEL=${LLM_MODEL:-claude-sonnet-4-6}
       - TTS_PROVIDER=${TTS_PROVIDER:-chatterbox}
       - AVATAR_ENGINE=${AVATAR_ENGINE:-musetalk}
+      - TTS_FORCE_EDGE=${TTS_FORCE_EDGE:-}
       - SECRET_KEY=${SECRET_KEY}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - ENVIRONMENT=${ENVIRONMENT:-development}
@@ -206,6 +208,7 @@ services:
       - LLM_MODEL=${LLM_MODEL:-claude-sonnet-4-6}
       - TTS_PROVIDER=${TTS_PROVIDER:-chatterbox}
       - AVATAR_ENGINE=${AVATAR_ENGINE:-musetalk}
+      - TTS_FORCE_EDGE=${TTS_FORCE_EDGE:-}
       - SECRET_KEY=${SECRET_KEY}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - ENVIRONMENT=${ENVIRONMENT:-development}

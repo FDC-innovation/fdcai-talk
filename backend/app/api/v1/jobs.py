@@ -15,7 +15,7 @@ from app.celery_app import celery_app
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-VALID_PIPELINES = {"clips", "talking-head", "podcast"}
+VALID_PIPELINES = {"clips", "talking-head", "podcast", "explainer"}
 
 
 def _user_id(current_user: Optional[User]) -> str:
@@ -170,7 +170,7 @@ async def create_job(
     await db.commit()
     await db.refresh(job)
 
-    queue = "gpu" if pipeline == "talking-head" else "cpu"
+    queue = "gpu" if pipeline in ("talking-head", "explainer") else "cpu"
     celery_app.send_task("run_pipeline_job", args=[job.id], queue=queue)
 
     logger.info(f"Job created: {job.id} pipeline={pipeline} user={job.user_id}")
