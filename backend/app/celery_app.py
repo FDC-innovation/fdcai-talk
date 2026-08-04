@@ -171,7 +171,7 @@ def run_pipeline_job(self, job_id: str):
                         "duration": r["duration"],
                     }
                 elif job.pipeline == "talking-head":
-                    from app.services.sadtalker_engine import generate_avatar
+                    from app.config import settings as _settings
                     params = job.params or {}
                     image_url = params.get("image_url")
                     audio_url = params.get("audio_url")
@@ -179,7 +179,41 @@ def run_pipeline_job(self, job_id: str):
                         raise ValueError("talking-head job requires params.image_url and params.audio_url")
                     job.progress = 10
                     await session.commit()
-                    result = await generate_avatar(image_url, audio_url, str(job.id))
+
+                    _engine = (params.get("engine") or _settings.AVATAR_ENGINE or "sadtalker").lower()
+                    if _engine == "sadtalker":
+                        # Proven HTTP path: SadTalker server (GPU box) or stub.
+                        from app.services.sadtalker_engine import generate_avatar
+                        result = await generate_avatar(image_url, audio_url, str(job.id))
+                    else:
+                        # MuseTalk / simple path via the animator. Animator needs
+                        # LOCAL files, so download the URLs first, then animate.
+                        # animator.animate() GPU-detects and auto-falls-back to
+                        # simple (ffmpeg static image + audio) when MuseTalk/GPU
+                        # is unavailable — safe on no-GPU dev machines.
+                        import os as _os, httpx as _httpx
+                        from app.services.animator import AvatarAnimator
+                        _out_dir = f"/tmp/videos/animator/{job.id}"
+                        _os.makedirs(_out_dir, exist_ok=True)
+                        _img_path = f"{_out_dir}/source.png"
+                        _aud_path = f"{_out_dir}/audio.wav"
+                        _out_path = f"{_out_dir}/avatar.mp4"
+                        async with _httpx.AsyncClient(timeout=120) as _c:
+                            for _url, _dest in ((image_url, _img_path), (audio_url, _aud_path)):
+                                _r = await _c.get(_url)
+                                if _r.status_code != 200:
+                                    raise ValueError(f"Could not fetch {_url} ({_r.status_code})")
+                                with open(_dest, "wb") as _f:
+                                    _f.write(_r.content)
+                        _animator = AvatarAnimator()
+                        _final = await _animator.animate(_img_path, _aud_path, _out_path)
+                        result = {
+                            "status": "done",
+                            "file_path": _final,
+                            "engine": _animator.engine,
+                            "size_bytes": _os.path.getsize(_final) if _os.path.exists(_final) else 0,
+                        }
+
                     job.progress = 90
                     await session.commit()
                     job.output = result

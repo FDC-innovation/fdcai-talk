@@ -47,6 +47,8 @@ _EDGE_VOICES = {
     "de": "de-DE-KatjaNeural",
     "el": "el-GR-AthinaNeural",
     "en": "en-US-AriaNeural",
+    # English male/female options for demo voice selection (edge-tts neural).
+    # Picked in _edge_fallback via voice_gender; defaults keep old behavior.
     "es": "es-ES-ElviraNeural",
     "fi": "fi-FI-NooraNeural",
     "fr": "fr-FR-DeniseNeural",
@@ -203,7 +205,7 @@ class TTSService:
                 voice_cloned=False,
             )
 
-    async def _edge_fallback(self, text: str, output_path: str, language: str = "en") -> str:
+    async def _edge_fallback(self, text: str, output_path: str, language: str = "en", voice_gender: str = "female", rate: str = "-12%") -> str:
         """Free neural-voice fallback via Microsoft Edge TTS (no key, no GPU)."""
         import edge_tts
         from pydub import AudioSegment
@@ -212,7 +214,12 @@ class TTSService:
         logger.info(f"Synthesizing (edge-tts, {voice}): {text[:80]}...")
         mp3_path = output_path.replace(".wav", "_edge.mp3")
 
-        await edge_tts.Communicate(text, voice).save(mp3_path)
+        # English gets explicit male/female choice; other langs keep their default.
+        _EN = {"male": "en-US-GuyNeural", "female": "en-US-AriaNeural"}
+        if language == "en":
+            voice = _EN.get(voice_gender, _EN["female"])
+        logger.info(f"Synthesizing (edge-tts, {voice}, rate={rate}): {text[:80]}...")
+        await edge_tts.Communicate(text, voice, rate=rate).save(mp3_path)
         await asyncio.to_thread(
             lambda: AudioSegment.from_mp3(mp3_path).export(output_path, format="wav")
         )
