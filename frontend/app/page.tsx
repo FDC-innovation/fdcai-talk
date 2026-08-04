@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useState } from "react";
 import dynamic from "next/dynamic";
 import { AvatarUpload } from "@/components/AvatarUpload";
 import { AvatarList } from "@/components/AvatarList";
-import { ConnectionStatus } from "@/components/ui/ConnectionStatus";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { AuthModal } from "@/components/AuthModal";
 import { api } from "@/lib/api";
@@ -12,23 +11,31 @@ import { toast } from "react-hot-toast";
 import { useStore } from "@/store/useStore";
 import { StudioPanel } from "@/components/StudioPanel";
 
-// Heavy panels (chat WebSocket pipeline, voice cloning recorder, history
-// list with TanStack queries, settings form) load on-demand instead of
-// shipping their JS in the home-page bundle. Cuts the initial chunk size
-// by ~150 KB and lets the marketing landing page paint sooner.
+// Heavy panels load on-demand to keep the initial bundle small.
 const VoicePanel = dynamic(() => import("@/components/VoicePanel").then((m) => m.VoicePanel), {
   ssr: false,
   loading: () => <PanelLoader label="Loading voice studio…" />,
 });
 
+const ExplainerPanel = dynamic(() => import("@/components/ExplainerPanel").then((m) => m.ExplainerPanel), {
+  ssr: false,
+  loading: () => <PanelLoader label="Loading video studio…" />,
+});
+
+const TutorialPanel = dynamic(() => import("@/components/TutorialPanel").then((m) => m.TutorialPanel), {
+  ssr: false,
+  loading: () => <PanelLoader label="Loading guides…" />,
+});
+
 function PanelLoader({ label }: { label: string }) {
   return (
-    <div className="flex items-center justify-center py-20 text-gray-500 text-sm">
-      <span className="inline-block w-2 h-2 rounded-full bg-primary-500 animate-pulse mr-2" />
+    <div className="flex items-center justify-center py-20 text-[#86868B] text-sm">
+      <span className="inline-block w-2 h-2 rounded-full bg-[#0071E3] animate-pulse mr-2" />
       {label}
     </div>
   );
 }
+
 import {
   Camera,
   Mic2,
@@ -42,71 +49,57 @@ import {
   Brain,
   AudioWaveform,
   Clapperboard,
+  Film,
+  BookOpen,
 } from "lucide-react";
 
 const FEATURES = [
   {
+    icon: Shield,
+    title: "Runs on your premises",
+    description: "Deploy the entire stack inside your own network. Nothing leaves your servers — ever.",
+  },
+  {
     icon: Brain,
-    title: "LLM-Powered Intelligence",
-    description: "Claude & GPT-4 drive natural conversations with context-aware, cached prompts.",
-    color: "from-purple-500 to-pink-500",
-    glow: "rgba(168,85,247,0.3)",
-  },
-  {
-    icon: AudioWaveform,
-    title: "Voice Cloning",
-    description: "Chatterbox Multilingual clones any voice from a 10-second sample in 23 languages.",
-    color: "from-blue-500 to-cyan-500",
-    glow: "rgba(59,130,246,0.3)",
-  },
-  {
-    icon: Activity,
-    title: "Lip-Sync Animation",
-    description: "MuseTalk V1.5 produces photorealistic lip-sync video aligned to the spoken audio.",
-    color: "from-emerald-500 to-teal-500",
-    glow: "rgba(16,185,129,0.3)",
+    title: "Open source, end to end",
+    description: "Every model and service is open and self-hosted. Inspect it, extend it, own it — no black boxes.",
   },
   {
     icon: Zap,
-    title: "Streaming Pipeline",
-    description: "WebSocket streams tokens, audio, and video chunk-by-chunk for low first-byte latency.",
-    color: "from-amber-500 to-orange-500",
-    glow: "rgba(245,158,11,0.3)",
+    title: "No token costs",
+    description: "No per-token API bills, no usage meters, no rate limits. Generate as much as your hardware allows.",
   },
   {
     icon: Globe,
-    title: "Multi-Language",
-    description: "Whisper STT + Chatterbox TTS support 23 languages end-to-end.",
-    color: "from-indigo-500 to-blue-500",
-    glow: "rgba(99,102,241,0.3)",
+    title: "No data sharing",
+    description: "Your decks, voices, faces, and videos are never sent to a third party. Zero external calls.",
   },
   {
-    icon: Shield,
-    title: "Privacy-First",
-    description: "Self-host everything — your photos, voices, and conversations stay on your infra.",
-    color: "from-rose-500 to-pink-500",
-    glow: "rgba(244,63,94,0.3)",
+    icon: AudioWaveform,
+    title: "Whole content-generation engine",
+    description: "Transcription, scripting, voice cloning, and lip-synced avatar video — one integrated pipeline.",
+  },
+  {
+    icon: Activity,
+    title: "Enterprise-grade security",
+    description: "Per-user isolation, JWT auth, and full audit of every job. Your data stays inside your walls.",
   },
 ];
 
 const STATS = [
-  { value: "23", label: "Languages" },
-  { value: "<200ms", label: "First-byte latency" },
-  { value: "2", label: "LLM backends" },
-  { value: "100%", label: "Self-hostable" },
+  { value: "100%", label: "On-premise" },
+  { value: "$0", label: "Per-token cost" },
+  { value: "Zero", label: "Data shared" },
+  { value: "Open", label: "Source" },
 ];
 
-type View = "home" | "avatars" | "voice" | "studio";
+type View = "home" | "avatars" | "voice" | "studio" | "explainer" | "tutorial";
 
 export default function Home() {
   const { isAuthenticated, user, clearAuth } = useStore();
   const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  // Session id to RESUME (set only when opening from history). Distinct from
-  // activeSessionId (reported back after a session starts) so it can key the
-  // ChatInterface without remounting mid-conversation when a fresh session id
-  // arrives.
-  const [resumeSessionId, setResumeSessionId] = useState<string | null>(null);
+  const [, setActiveSessionId] = useState<string | null>(null);
+  const [, setResumeSessionId] = useState<string | null>(null);
   const [view, setView] = useState<View>("home");
 
   const handleVoiceSelect = async (voiceId: string) => {
@@ -124,45 +117,47 @@ export default function Home() {
 
   const handleSelectAvatar = (id: string) => {
     setSelectedAvatar(id);
-    setResumeSessionId(null); // picking an avatar starts a fresh conversation
+    setResumeSessionId(null);
   };
 
-
+  // keep setter referenced so it isn't flagged unused
+  void setActiveSessionId;
 
   const navItems: { id: View; icon: typeof Sparkles; label: string; disabled?: boolean }[] = [
     { id: "home", icon: Sparkles, label: "Home" },
     { id: "avatars", icon: Camera, label: "Avatars" },
     { id: "voice", icon: Mic2, label: "Voice" },
-    { id: "studio", icon: Clapperboard, label: "Studio" },
+    { id: "studio", icon: Clapperboard, label: "API" },
+    { id: "explainer", icon: Film, label: "Video" },
+    { id: "tutorial", icon: BookOpen, label: "Guides" },
   ];
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen" style={{ background: "#FBFBFD", color: "#1D1D1F" }}>
       {/* ── Auth gate ── */}
       {!isAuthenticated() && <AuthModal />}
 
       {/* ── Navigation ── */}
-      <nav className="fixed top-0 left-0 right-0 z-50 h-16">
+      <nav className="fixed top-0 left-0 right-0 z-50 h-16 bg-white/80 backdrop-blur-xl border-b border-[#E5E5EA]"
+           style={{ WebkitBackdropFilter: "saturate(180%) blur(20px)", backdropFilter: "saturate(180%) blur(20px)" }}>
         <div className="h-full mx-auto max-w-7xl px-6 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-accent-600 flex items-center justify-center shadow-glow-sm">
-              <Sparkles size={16} className="text-white" />
-            </div>
-            <span className="font-bold text-lg gradient-text">FDCAI</span>
-          </div>
+          <button onClick={() => setView("home")} className="flex items-center gap-2.5">
+            <img src="/chalchitra-logo.png" alt="Chalchitra" className="w-8 h-8 rounded-[9px] object-contain" />
+            <span className="wordmark-chalchitra text-[23px] leading-none text-[#1D1D1F]">Chalchitra</span>
+          </button>
 
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-surface-800/80 backdrop-blur-xl border border-white/8 overflow-x-auto">
+          <div className="flex items-center gap-0.5 p-1 rounded-full bg-[#F5F5F7] border border-[#E5E5EA] overflow-x-auto">
             {navItems.map(({ id, icon: Icon, label, disabled }) => (
               <button
                 key={id}
                 onClick={() => !disabled && setView(id)}
                 disabled={disabled || undefined}
                 aria-current={view === id ? "page" : undefined}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 flex-shrink-0
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[13px] font-medium transition-all duration-200 flex-shrink-0
                   ${
                     view === id
-                      ? "bg-gradient-to-r from-primary-600/80 to-accent-600/80 text-white shadow-glow-sm"
-                      : "text-gray-400 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed"
+                      ? "bg-white text-[#1D1D1F] shadow-sm"
+                      : "text-[#6E6E73] hover:text-[#1D1D1F] disabled:opacity-30 disabled:cursor-not-allowed"
                   }`}
               >
                 <Icon size={14} />
@@ -171,18 +166,22 @@ export default function Home() {
             ))}
           </div>
 
-          <div className="flex items-center gap-3">
-            <ConnectionStatus />
+          <div className="flex items-center gap-2.5">
             <ThemeToggle />
             {user && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-400 hidden sm:block">{user.username}</span>
+              <div className="flex items-center gap-1.5 pl-1.5 pr-1 py-1 rounded-full bg-[#F5F5F7] border border-[#E5E5EA]">
+                <div className="flex items-center gap-2 pl-1 pr-2">
+                  <div className="w-7 h-7 rounded-full bg-[#0071E3] flex items-center justify-center text-white text-[13px] font-semibold flex-shrink-0">
+                    {(user.username?.[0] || "U").toUpperCase()}
+                  </div>
+                  <span className="text-[13px] font-medium text-[#1D1D1F] hidden sm:block max-w-[140px] truncate">{user.username}</span>
+                </div>
                 <button
                   onClick={() => {
                     api.logout();
                     clearAuth();
                   }}
-                  className="text-xs text-gray-500 hover:text-red-400 transition-colors px-2 py-1 rounded-lg hover:bg-red-500/10"
+                  className="text-[12px] font-medium text-[#6E6E73] hover:text-[#D70015] transition-colors px-2.5 py-1.5 rounded-full hover:bg-white"
                   title="Sign out"
                 >
                   Sign out
@@ -191,8 +190,6 @@ export default function Home() {
             )}
           </div>
         </div>
-        {/* nav glass blur border */}
-        <div className="absolute inset-0 -z-10 bg-surface-900/70 backdrop-blur-xl border-b border-white/6" />
       </nav>
 
       <main className="pt-16">
@@ -200,118 +197,99 @@ export default function Home() {
         {view === "home" && (
           <div className="animate-fade-in">
             {/* Hero */}
-            <section className="relative flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] px-6 text-center overflow-hidden">
-              {/* Aurora background */}
-              <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute -top-40 -left-40 w-96 h-96 bg-primary-600/20 rounded-full blur-3xl animate-float" />
-                <div
-                  className="absolute -top-20 -right-40 w-80 h-80 bg-accent-600/15 rounded-full blur-3xl animate-float"
-                  style={{ animationDelay: "2s" }}
-                />
-                <div
-                  className="absolute bottom-20 left-1/4 w-72 h-72 bg-primary-800/20 rounded-full blur-3xl animate-float"
-                  style={{ animationDelay: "4s" }}
-                />
-                <div
-                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full opacity-5"
-                  style={{ background: "radial-gradient(circle, #a855f7 0%, transparent 70%)" }}
-                />
+            <section className="relative flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] px-6 text-center">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#0071E3]/[0.08] mb-8">
+                <Sparkles size={13} className="text-[#0071E3]" />
+                <span className="text-[13px] text-[#0071E3] font-semibold">Open-source · On-premise · No data leaves your network</span>
               </div>
 
-              {/* Badge */}
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary-500/10 border border-primary-500/30 mb-8 animate-slide-up">
-                <Sparkles size={14} className="text-primary-400" />
-                <span className="text-sm text-primary-300 font-medium">Next-Gen AI Avatar Platform</span>
-              </div>
-
-              {/* Headline */}
-              <h1
-                className="text-6xl md:text-7xl lg:text-8xl font-black leading-none mb-6 tracking-tight animate-slide-up"
-                style={{ animationDelay: "0.1s" }}
-              >
-                <span className="gradient-text">FDC</span>
+              <h1 className="text-[56px] md:text-[76px] font-bold leading-[1.02] mb-6 tracking-[-0.03em] text-[#1D1D1F] max-w-4xl">
+                The AI video engine
                 <br />
-                <span className="text-white">AI Native,</span>
-                <br />
-                <span className="gradient-text-gold">Video Editing.</span>
+                that runs on your servers.
               </h1>
 
-              <p
-                className="max-w-2xl text-lg md:text-xl text-gray-400 mb-10 leading-relaxed animate-slide-up"
-                style={{ animationDelay: "0.2s" }}
-              >
-                Upload a photo, clone a voice, and have real-time AI-powered conversations with photorealistic lip-sync
-                animations. Powered by Claude, Whisper, Chatterbox, and MuseTalk.
+              <p className="max-w-2xl text-[19px] md:text-[21px] text-[#6E6E73] mb-10 leading-relaxed">
+                A fully open-source, on-premise content-generation engine. Turn decks into
+                narrated avatar videos — transcription, scripting, voice cloning, and lip-sync —
+                with no token costs, no data sharing, and nothing ever leaving your network.
               </p>
 
-              {/* CTAs */}
-              <div
-                className="flex flex-wrap items-center justify-center gap-4 animate-slide-up"
-                style={{ animationDelay: "0.3s" }}
-              >
+              <div className="flex flex-wrap items-center justify-center gap-3">
                 <button
-                  onClick={() => setView("avatars")}
-                  className="btn-primary text-base px-8 py-3.5 rounded-2xl group"
+                  onClick={() => setView("explainer")}
+                  className="inline-flex items-center gap-2 text-[16px] font-semibold px-7 py-3 rounded-full text-white bg-[#0071E3] hover:bg-[#0077ED] transition-all active:scale-[0.98] group"
                 >
-                  <Play size={18} className="group-hover:scale-110 transition-transform" />
-                  Get Started Free
-                  <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                  <Play size={17} fill="white" />
+                  Open Video Studio
+                  <ChevronRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
                 </button>
-                <button onClick={() => setView("voice")} className="btn-secondary text-base px-8 py-3.5 rounded-2xl">
-                  <Mic2 size={18} />
-                  Clone a Voice
+                <button
+                  onClick={() => setView("voice")}
+                  className="inline-flex items-center gap-2 text-[16px] font-semibold px-7 py-3 rounded-full text-[#0071E3] bg-white border border-[#D2D2D7] hover:bg-[#F5F5F7] transition-all active:scale-[0.98]"
+                >
+                  <Mic2 size={17} />
+                  Clone a voice
                 </button>
               </div>
 
-              {/* Stats */}
-              <div
-                className="flex flex-wrap items-center justify-center gap-8 mt-16 animate-slide-up"
-                style={{ animationDelay: "0.4s" }}
-              >
+              <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-6 mt-20">
                 {STATS.map(({ value, label }) => (
                   <div key={label} className="text-center">
-                    <div className="text-3xl font-black gradient-text">{value}</div>
-                    <div className="text-sm text-gray-500 mt-1">{label}</div>
+                    <div className="text-[34px] font-bold text-[#1D1D1F] tracking-[-0.02em]">{value}</div>
+                    <div className="text-[14px] text-[#86868B] mt-0.5">{label}</div>
                   </div>
                 ))}
               </div>
             </section>
 
             {/* Features */}
-            <section className="px-6 pb-24 max-w-7xl mx-auto">
-              <div className="text-center mb-14">
-                <h2 className="text-4xl font-black mb-4">
-                  Everything you need to build
-                  <span className="gradient-text"> avatar experiences</span>
+            <section className="px-6 pb-28 max-w-6xl mx-auto">
+              <div className="text-center mb-16">
+                <h2 className="text-[40px] font-bold mb-4 tracking-[-0.02em] text-[#1D1D1F]">
+                  Own the whole pipeline.
                 </h2>
-                <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-                  A complete stack — from voice cloning to lip-sync video — running locally or in the cloud.
+                <p className="text-[#6E6E73] text-[19px] max-w-2xl mx-auto leading-relaxed">
+                  A complete content-generation engine — open source, self-hosted, and private by design.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {FEATURES.map(({ icon: Icon, title, description, color, glow }) => (
-                  <div key={title} className="feature-card group" style={{ "--glow": glow } as CSSProperties}>
-                    <div
-                      className={`w-12 h-12 rounded-xl bg-gradient-to-br ${color} flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform duration-300`}
-                    >
-                      <Icon size={22} className="text-white" />
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {FEATURES.map(({ icon: Icon, title, description }) => (
+                  <div
+                    key={title}
+                    className="bg-white rounded-[18px] border border-[#EDEDF0] p-7 transition-all duration-300 hover:-translate-y-0.5"
+                    style={{ boxShadow: "0 4px 24px rgba(0,0,0,0.05)" }}
+                  >
+                    <div className="w-11 h-11 rounded-[12px] bg-[#0071E3]/[0.08] flex items-center justify-center mb-4">
+                      <Icon size={20} className="text-[#0071E3]" />
                     </div>
-                    <h3 className="font-bold text-lg text-white mb-2">{title}</h3>
-                    <p className="text-gray-400 text-sm leading-relaxed">{description}</p>
+                    <h3 className="font-semibold text-[17px] text-[#1D1D1F] mb-1.5">{title}</h3>
+                    <p className="text-[#6E6E73] text-[14px] leading-relaxed">{description}</p>
                   </div>
                 ))}
               </div>
             </section>
+
+            {/* Footer */}
+            <footer className="border-t border-[#E5E5EA] py-8">
+              <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-[#86868B]">
+                  <img src="/chalchitra-logo.png" alt="Chalchitra" className="w-5 h-5 rounded-md object-contain" />
+                  <span className="wordmark-chalchitra text-[16px] text-[#1D1D1F]">Chalchitra</span>
+                </div>
+                <p className="text-[13px] text-[#AEAEB2]">Open-source, on-premise AI video generation — your data never leaves your network</p>
+              </div>
+            </footer>
           </div>
         )}
 
         {/* ── AVATAR VIEW ── */}
         {view === "avatars" && (
-          <div className="max-w-7xl mx-auto px-6 py-10 animate-fade-in">
+          <div className="lightscope max-w-7xl mx-auto px-6 py-12 animate-fade-in">
             <div className="mb-8">
-              <h1 className="text-3xl font-black gradient-text mb-2">Avatar Studio</h1>
-              <p className="text-gray-400">Upload photos and manage your avatar collection.</p>
+              <h1 className="text-[32px] font-bold tracking-[-0.02em] text-[#1D1D1F] mb-1">Presenters</h1>
+              <p className="text-[#6E6E73] text-[17px]">Upload photos and manage your avatar collection.</p>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               <AvatarUpload />
@@ -319,10 +297,13 @@ export default function Home() {
             </div>
             {selectedAvatar && (
               <div className="mt-8 flex justify-center">
-                <button onClick={() => setView("studio")} className="btn-primary text-lg px-10 py-4 rounded-2xl group">
-                  <Clapperboard size={20} />
-                  Open Studio
-                  <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                <button
+                  onClick={() => setView("explainer")}
+                  className="inline-flex items-center gap-2 text-[16px] font-semibold px-8 py-3.5 rounded-full text-white bg-[#0071E3] hover:bg-[#0077ED] transition-all active:scale-[0.98] group"
+                >
+                  <Film size={18} />
+                  Make a video
+                  <ChevronRight size={18} className="group-hover:translate-x-0.5 transition-transform" />
                 </button>
               </div>
             )}
@@ -331,21 +312,23 @@ export default function Home() {
 
         {/* ── VOICE VIEW ── */}
         {view === "voice" && (
-          <div className="max-w-4xl mx-auto px-6 py-10 animate-fade-in">
+          <div className="lightscope max-w-4xl mx-auto px-6 py-12 animate-fade-in">
             <div className="mb-8">
-              <h1 className="text-3xl font-black gradient-text mb-2">Voice Studio</h1>
-              <p className="text-gray-400">Clone voices and manage your voice library.</p>
+              <h1 className="text-[32px] font-bold tracking-[-0.02em] text-[#1D1D1F] mb-1">Voice Studio</h1>
+              <p className="text-[#6E6E73] text-[17px]">Clone voices and manage your voice library.</p>
             </div>
             <VoicePanel onVoiceSelect={handleVoiceSelect} />
           </div>
         )}
 
-
-
         {/* ── STUDIO VIEW ── */}
         {view === "studio" && <StudioPanel />}
 
+        {/* ── EXPLAINER / VIDEO VIEW ── */}
+        {view === "explainer" && <ExplainerPanel />}
 
+        {/* ── TUTORIAL VIEW ── */}
+        {view === "tutorial" && <TutorialPanel />}
       </main>
     </div>
   );

@@ -39,23 +39,16 @@ const PIPELINES: { id: Pipeline; icon: typeof Scissors; label: string; desc: str
   {
     id: 'clips',
     icon: Scissors,
-    label: 'Clip Cutter',
-    desc: 'Auto-detect and cut highlight clips from any video.',
+    label: 'Virality Clips',
+    desc: 'Turn any long video into short, share-ready highlight clips — automatically.',
     color: 'from-violet-500 to-purple-600',
   },
   {
     id: 'podcast',
     icon: Radio,
-    label: 'Podcast',
-    desc: 'Chapter detection, title cards, captions, and final stitch.',
+    label: 'Podcast Studio',
+    desc: 'Chapters, title cards, captions, and a polished final stitch — from raw audio.',
     color: 'from-blue-500 to-cyan-500',
-  },
-  {
-    id: 'talking-head',
-    icon: Bot,
-    label: 'Talking Head',
-    desc: 'Animate a face photo with an audio file (GPU required).',
-    color: 'from-emerald-500 to-teal-500',
   },
 ]
 
@@ -355,11 +348,12 @@ export function StudioPanel() {
   const selectedPipeline = PIPELINES.find(p => p.id === pipeline)
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-10 animate-fade-in">
-      <div className="mb-8 flex items-start justify-between">
+    <div className="lightscope max-w-4xl mx-auto px-6 py-12 animate-fade-in">
+      <div className="mb-10 flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-black gradient-text mb-2">Studio</h1>
-          <p className="text-gray-400">Upload media, pick a pipeline, and download your outputs.</p>
+          <p className="text-[13px] font-semibold tracking-[0.08em] uppercase text-[#0071E3] mb-2">Developer API</p>
+          <h1 className="text-[32px] font-bold tracking-[-0.02em] text-[#1D1D1F] mb-1">API Pipelines</h1>
+          <p className="text-[17px] text-[#6E6E73]">Upload media, pick a pipeline, and download your outputs.</p>
         </div>
         {jobStatus !== 'idle' && (
           <button
@@ -375,22 +369,22 @@ export function StudioPanel() {
       {/* Step 1 — Pick pipeline */}
       <div className="mb-6">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">1 · Choose pipeline</p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
           {PIPELINES.map(({ id, icon: Icon, label, desc, color }) => (
             <button
               key={id}
               onClick={() => { setPipeline(id); setJobResult(null) }}
-              className={`text-left p-4 rounded-2xl border transition-all duration-200
+              className={`text-left p-5 rounded-2xl border transition-all duration-200
                 ${pipeline === id
-                  ? 'border-primary-500/60 bg-primary-500/10 shadow-glow-sm'
-                  : 'border-white/8 bg-white/3 hover:border-white/15 hover:bg-white/6'
+                  ? 'border-[#0071E3] bg-[#0071E3]/[0.05] shadow-[0_4px_20px_rgba(0,113,227,0.12)]'
+                  : 'border-[#E5E5EA] bg-white hover:border-[#0071E3]/40 shadow-[0_2px_12px_rgba(0,0,0,0.04)]'
                 }`}
             >
-              <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${color} flex items-center justify-center mb-3`}>
-                <Icon size={16} className="text-white" />
+              <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${color} flex items-center justify-center mb-3`}>
+                <Icon size={17} className="text-white" />
               </div>
-              <div className="font-semibold text-sm text-white mb-1">{label}</div>
-              <div className="text-xs text-gray-500 leading-relaxed">{desc}</div>
+              <div className="font-semibold text-[15px] text-[#1D1D1F] mb-1">{label}</div>
+              <div className="text-[13px] text-[#6E6E73] leading-relaxed">{desc}</div>
             </button>
           ))}
         </div>

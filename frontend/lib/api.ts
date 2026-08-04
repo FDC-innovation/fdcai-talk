@@ -283,7 +283,7 @@ export const api = {
     return response.data as { media_path: string; filename: string; size_bytes: number }
   },
 
-  createJob: async (pipeline: 'clips' | 'podcast' | 'talking-head', params: Record<string, string>) => {
+  createJob: async (pipeline: 'clips' | 'podcast' | 'talking-head' | 'explainer', params: Record<string, string>) => {
     const response = await apiClient.post(`/api/v1/jobs/${pipeline}`, { params })
     return { job_id: response.data.id, status: response.data.status }
   },

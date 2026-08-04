@@ -239,6 +239,22 @@ def run_pipeline_job(self, job_id: str):
                     language = params.get("language", "en")
                     instructions = params.get("instructions")
                     speaker_wav = params.get("speaker_wav")
+                    if not speaker_wav:
+                        _voice_id = params.get("voice_id")
+                        if _voice_id:
+                            try:
+                                import json as _json
+                                from pathlib import Path as _Path
+                                _idx = _Path("voice_profiles/index.json")
+                                if _idx.exists():
+                                    for _e in _json.loads(_idx.read_text()):
+                                        if _e.get("id") == _voice_id and _e.get("wav_path"):
+                                            if _Path(_e["wav_path"]).exists():
+                                                speaker_wav = _e["wav_path"]
+                                                logger.info(f"explainer: cloning voice {_voice_id} -> {speaker_wav}")
+                                            break
+                            except Exception as _ve:
+                                logger.warning(f"explainer: could not resolve voice_id {_voice_id}: {_ve}")
 
                     job.progress = 10
                     await session.commit()
