@@ -120,7 +120,7 @@ async def download_artifact(
         idx = int(artifact.split("_")[1])
         clips = output.get("clips", [])
         if idx < len(clips):
-            file_path = clips[idx].get("file_path")
+            file_path = clips[idx].get("file_path") or clips[idx].get("clip_path")
     elif artifact.startswith("chapter_"):
         idx = int(artifact.split("_")[1])
         chapters = output.get("chapters", [])

@@ -38,6 +38,34 @@ def _truncation_repair(text: str) -> str:
     return text
 
 
+
+def _extract_objects(text: str) -> List[dict]:
+    """Last resort: scan for every balanced top-level {...} block and parse each.
+    Handles small-model output like preamble + separately-fenced objects with
+    no array wrapper. Returns whatever dicts it can recover (possibly empty)."""
+    text = re.sub(r"```(?:json)?", " ", text)
+    objs, depth, start_i = [], 0, -1
+    for i, ch in enumerate(text):
+        if ch == "{":
+            if depth == 0:
+                start_i = i
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0 and start_i != -1:
+                blob = text[start_i:i + 1]
+                for cand in (blob, _fix_trailing_commas(blob),
+                             _fix_single_quotes(_fix_trailing_commas(blob))):
+                    try:
+                        d = json.loads(cand)
+                        if isinstance(d, dict):
+                            objs.append(d)
+                            break
+                    except Exception:
+                        continue
+                start_i = -1
+    return objs
+
 def parse_llm_json_array(text: str, context: str = "") -> List[dict]:
     """
     Parse a JSON array from LLM output. Returns a list of dicts.
@@ -61,6 +89,10 @@ def parse_llm_json_array(text: str, context: str = "") -> List[dict]:
                         return v
             except Exception:
                 pass
+        recovered = _extract_objects(text)
+        if recovered:
+            logger.warning(f"[{context}] no array; recovered {len(recovered)} bare objects")
+            return recovered
         raise ValueError(f"No JSON array found in LLM output: {text[:200]}")
 
     candidates = [
