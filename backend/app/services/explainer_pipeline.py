@@ -111,3 +111,103 @@ async def video_to_scripts(
         return {"transcript": "", "sections": [], "message": "empty transcript"}
     sections = await build_section_scripts(transcript, instructions=instructions)
     return {"transcript": transcript, "sections": sections}
+
+
+# ============================================================================
+# Stage B — sections -> per-section avatar clips
+# ============================================================================
+# For each {title, script} section from Stage A:
+#     script -> tts_service.synthesize(speaker_wav=optional) -> audio.wav
+#     avatar image + audio.wav -> AvatarAnimator().animate() -> clip.mp4
+#
+# Voice choice is honored via `speaker_wav`:
+#     speaker_wav set   -> cloned voice (Chatterbox on GPU box)
+#     speaker_wav None  -> plain TTS (male/female handled inside tts_service)
+#
+# Engine: routes through the animator (local-file path), mirroring the
+# talking-head task's `else` branch in celery_app.py. animate() GPU-detects
+# and auto-falls-back to `simple` (ffmpeg static image + audio) on no-GPU
+# machines, so this is safe on the Mac and does real MuseTalk on the GPU box.
+#
+# NOTE: SadTalker (sadtalker_engine.generate_avatar) is URL-only -- it posts
+# image_url/audio_url to an HTTP server. Per-section audio is generated locally
+# and has no URL mid-pipeline, so SadTalker-per-section needs an audio-upload
+# step to mint URLs first. That's deferred to Stage C wiring; Stage B uses the
+# animator path, which is the correct no-GPU-safe route regardless.
+
+
+async def sections_to_clips(
+    sections: list,
+    image_path: str,
+    speaker_wav: Optional[str] = None,
+    language: str = "en",
+    out_dir: Optional[str] = None,
+) -> list:
+    """
+    Stage B: each section script -> spoken audio -> avatar clip.
+
+    Args:
+        sections:    list of {title, script} from Stage A.
+        image_path:  LOCAL path to the avatar source image (png/jpg).
+        speaker_wav: optional reference wav for voice cloning. If None,
+                     plain TTS is used (male/female decided by tts_service).
+        language:    2-letter language code passed to TTS.
+        out_dir:     base output dir; a temp dir is made if not given.
+
+    Returns:
+        list of {index, title, script, audio_path, clip_path, engine,
+                 size_bytes} -- one entry per section that produced a clip.
+    """
+    if not os.path.exists(image_path):
+        raise FileNotFoundError(f"Avatar image not found: {image_path}")
+
+    # Import here (not at module top) so Stage A stays importable even if the
+    # animator's heavier deps are unavailable in a given environment.
+    from app.services.tts import tts_service
+    from app.services.animator import AvatarAnimator
+
+    base = out_dir or tempfile.mkdtemp(prefix="explainer_clips_")
+    os.makedirs(base, exist_ok=True)
+
+    animator = AvatarAnimator()
+    clips = []
+
+    for i, section in enumerate(sections):
+        script = str(section.get("script", "")).strip()
+        title = str(section.get("title", "")).strip() or f"Section {i + 1}"
+        if not script:
+            logger.warning(f"sections_to_clips: section {i} has empty script, skipping")
+            continue
+
+        sec_dir = os.path.join(base, f"section_{i:02d}")
+        os.makedirs(sec_dir, exist_ok=True)
+        audio_path = os.path.join(sec_dir, "audio.wav")
+        clip_path = os.path.join(sec_dir, "clip.mp4")
+
+        logger.info(f"sections_to_clips: [{i}] '{title}' -- synthesizing audio")
+        await tts_service.synthesize(
+            text=script,
+            output_path=audio_path,
+            speaker_wav=speaker_wav,
+            language=language,
+        )
+
+        logger.info(f"sections_to_clips: [{i}] '{title}' -- animating clip")
+        final_path = await animator.animate(image_path, audio_path, clip_path)
+
+        size = os.path.getsize(final_path) if os.path.exists(final_path) else 0
+        clips.append({
+            "index": i,
+            "title": title,
+            "script": script,
+            "audio_path": audio_path,
+            "clip_path": final_path,
+            "engine": animator.engine,
+            "size_bytes": size,
+        })
+        logger.info(
+            f"sections_to_clips: [{i}] done -- {size} bytes via {animator.engine}"
+        )
+
+    logger.info(f"sections_to_clips: produced {len(clips)} clip(s)")
+    return clips
