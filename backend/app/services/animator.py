@@ -78,6 +78,14 @@ class AvatarAnimator:
                     ":" + existing if existing else ""
                 )
 
+        elif self.engine == "sadtalker":
+            _url = getattr(settings, "SADTALKER_URL", "") or os.environ.get("SADTALKER_URL", "")
+            if not _url:
+                logger.warning("AVATAR_ENGINE=sadtalker but SADTALKER_URL is not set; using simple.")
+                self.engine = "simple"
+            else:
+                logger.info(f"SadTalker engine will call: {_url}")
+
         elif self.engine not in ("simple",):
             logger.warning(f"Unknown engine '{self.engine}', using simple animation.")
             self.engine = "simple"
@@ -240,6 +248,8 @@ class AvatarAnimator:
         try:
             if self.engine == "musetalk":
                 return await self._animate_musetalk(avatar_image_path, audio_path, output_path)
+            elif self.engine == "sadtalker":
+                return await self._animate_sadtalker(avatar_image_path, audio_path, output_path)
             else:
                 return await self._animate_simple(avatar_image_path, audio_path, output_path)
         except Exception as e:
@@ -265,6 +275,59 @@ class AvatarAnimator:
         await self._worker_infer(avatar_path, audio_path, output_path, coord_cache)
 
         logger.info(f"MuseTalk animation done: {output_path}")
+        return output_path
+
+    # ── SadTalker (HTTP service) ──────────────────────────────────────────────
+
+    async def _animate_sadtalker(
+        self,
+        avatar_path: str,
+        audio_path: str,
+        output_path: str,
+    ) -> str:
+        """Call the SadTalker HTTP service; serve local files so it can fetch them."""
+        import http.server
+        import socketserver
+        import threading
+        import functools
+        import socket
+        import httpx
+
+        url = (getattr(settings, "SADTALKER_URL", "") or os.environ.get("SADTALKER_URL", "")).rstrip("/")
+        if not url:
+            raise RuntimeError("SADTALKER_URL not set")
+
+        serve_dir = str(Path(audio_path).parent)
+        img_name = Path(avatar_path).name
+        aud_name = Path(audio_path).name
+        if str(Path(avatar_path).parent) != serve_dir:
+            import shutil
+            shutil.copy(avatar_path, os.path.join(serve_dir, img_name))
+
+        handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=serve_dir)
+        httpd = socketserver.TCPServer(("0.0.0.0", 0), handler)
+        port = httpd.server_address[1]
+        t = threading.Thread(target=httpd.serve_forever, daemon=True)
+        t.start()
+
+        worker_host = os.environ.get("WORKER_HOST") or socket.gethostname()
+        image_url = f"http://{worker_host}:{port}/{img_name}"
+        audio_url = f"http://{worker_host}:{port}/{aud_name}"
+        logger.info(f"SadTalker: serving on :{port}, POST {url}/generate (image={image_url}, audio={audio_url})")
+
+        try:
+            timeout = httpx.Timeout(5400.0, connect=30.0)
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                r = await client.post(f"{url}/generate", json={"image_url": image_url, "audio_url": audio_url})
+                if r.status_code != 200:
+                    raise RuntimeError(f"SadTalker /generate failed {r.status_code}: {r.text[:500]}")
+                with open(output_path, "wb") as f:
+                    f.write(r.content)
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+
+        logger.info(f"SadTalker animation done: {output_path}")
         return output_path
 
     # ── Simple ffmpeg fallback ────────────────────────────────────────────────

@@ -63,12 +63,15 @@ async def build_section_scripts(
         f"Below is a transcript of a deck/presentation walkthrough video.\n"
         f"Break its content into {section_range} distinct sections, each covering "
         f"one clear idea.{user_instruction}\n"
-        "For EACH section return:\n"
-        "  - title: max 6 words, describes the idea\n"
-        "  - script: 40-70 words the avatar will SPEAK aloud — natural, "
-        "conversational, standalone. No slide references, no 'in this slide'.\n"
-        "Return ONLY a raw JSON array of objects with keys 'title' and 'script'.\n\n"
-        f"TRANSCRIPT:\n{transcript}"
+        "For EACH section return an object with:\n"
+        "  - title: max 6 words\n"
+        "  - script: EXACTLY 8-12 words, one short spoken sentence, conversational, standalone.\n\n"
+        "CRITICAL: Respond with ONLY a raw JSON array. No prose, no markdown, no bullets, "
+        "no code fences, no explanation. Start your reply with [ and end with ].\n"
+        "EXACT FORMAT:\n"
+        '[{"title": "Example Title", "script": "This is a short spoken sentence example here."}]\n\n'
+        f"TRANSCRIPT:\n{transcript}\n\n"
+        "JSON array:"
     )
 
     raw = await llm_service.generate_response(

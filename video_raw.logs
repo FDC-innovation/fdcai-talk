@@ -1,0 +1,33 @@
+avatar-celery-worker-gpu  | [2026-08-06 08:27:53,723: INFO/MainProcess] Task run_pipeline_job[fb5befa0-7729-4160-8354-f5c932ab806f] received
+avatar-celery-worker-gpu  | [2026-08-06 08:27:53,751: INFO/ForkPoolWorker-1] Starting pipeline job a54565b5-7203-4dc3-9666-dd755848dcf7
+avatar-celery-worker-gpu  | [2026-08-06 08:27:55,287: INFO/ForkPoolWorker-1] LLM provider 'ollama' → OpenAI-compatible client at http://ollama:11434/v1
+avatar-celery-worker-gpu  | [2026-08-06 08:27:55,824: INFO/ForkPoolWorker-1] Explainer: extracted audio -> /tmp/tmp3dcuni9x/audio.wav, running Whisper
+avatar-celery-worker-gpu  | [2026-08-06 08:28:02,714: INFO/ForkPoolWorker-1] Loading Whisper model 'small' on cpu (int8)…
+avatar-celery-worker-gpu  | [2026-08-06 08:28:03,187: INFO/ForkPoolWorker-1] HTTP Request: GET https://huggingface.co/api/models/Systran/faster-whisper-small/revision/main "HTTP/1.1 200 OK"
+avatar-celery-worker-gpu  | [2026-08-06 08:28:13,188: INFO/ForkPoolWorker-1] Whisper model loaded
+avatar-celery-worker-gpu  | [2026-08-06 08:28:13,500: INFO/ForkPoolWorker-1] Processing audio with duration 00:05.035
+avatar-celery-worker-gpu  | onnxruntime cpuid_info warning: Unknown CPU vendor. cpuinfo_vendor value: 0
+avatar-celery-worker-gpu  | [2026-08-06 08:28:13,648: INFO/ForkPoolWorker-1] VAD filter removed 00:00.176 of audio
+avatar-celery-worker-gpu  | [2026-08-06 08:28:17,374: INFO/ForkPoolWorker-1] Transcribed 68 chars (lang=en)
+avatar-celery-worker-gpu  | [2026-08-06 08:29:11,478: INFO/ForkPoolWorker-1] HTTP Request: POST http://ollama:11434/v1/chat/completions "HTTP/1.1 200 OK"
+avatar-celery-worker-gpu  | [2026-08-06 08:29:12,291: INFO/ForkPoolWorker-1] build_section_scripts: 1 sections
+avatar-celery-worker-gpu  | [2026-08-06 08:29:12,949: INFO/ForkPoolWorker-1] HTTP Request: GET http://backend:8000/uploads/avatars/c1cda65a-bc2d-4f76-a994-8c1b90f5ebbf/image.jpg "HTTP/1.1 200 OK"
+avatar-celery-worker-gpu  | [2026-08-06 08:29:14,463: INFO/ForkPoolWorker-1] AvatarAnimator: engine=sadtalker, device=cpu (no GPU — consider AWS g5/g6 instance for real-time performance)
+avatar-celery-worker-gpu  | [2026-08-06 08:29:14,464: INFO/ForkPoolWorker-1] AvatarAnimator: engine=sadtalker, device=cpu (no GPU — consider AWS g5/g6 instance for real-time performance)
+avatar-celery-worker-gpu  | [2026-08-06 08:29:14,465: INFO/ForkPoolWorker-1] sections_to_clips: [0] 'Chalcitra 2.0 Launch' -- synthesizing audio
+avatar-celery-worker-gpu  | [2026-08-06 08:29:14,465: WARNING/ForkPoolWorker-1] Chatterbox failed (name 'os' is not defined), trying Edge TTS fallback
+avatar-celery-worker-gpu  | [2026-08-06 08:29:15,953: INFO/ForkPoolWorker-1] Synthesizing (edge-tts, en-US-AriaNeural): We are excited about this new version....
+avatar-celery-worker-gpu  | [2026-08-06 08:29:15,953: INFO/ForkPoolWorker-1] Synthesizing (edge-tts, en-US-AriaNeural, rate=-12%): We are excited about this new version....
+avatar-celery-worker-gpu  | [2026-08-06 08:29:17,795: INFO/ForkPoolWorker-1] Edge TTS synthesis complete: /tmp/videos/explainer/a54565b5-7203-4dc3-9666-dd755848dcf7/clips/section_00/audio.wav
+avatar-celery-worker-gpu  | [2026-08-06 08:29:17,795: INFO/ForkPoolWorker-1] sections_to_clips: [0] 'Chalcitra 2.0 Launch' -- animating clip
+avatar-celery-worker-gpu  | [2026-08-06 08:29:17,795: INFO/ForkPoolWorker-1] SadTalker engine will call: http://sadtalker:5003
+avatar-celery-worker-gpu  | [2026-08-06 08:29:17,795: INFO/ForkPoolWorker-1] Animating [sadtalker] image=/tmp/videos/explainer/a54565b5-7203-4dc3-9666-dd755848dcf7/avatar.png audio=/tmp/videos/explainer/a54565b5-7203-4dc3-9666-dd755848dcf7/clips/section_00/audio.wav
+avatar-celery-worker-gpu  | [2026-08-06 08:29:17,797: INFO/ForkPoolWorker-1] SadTalker: serving on :54089, POST http://sadtalker:5003/generate (image=http://dc701becf64c:54089/avatar.png, audio=http://dc701becf64c:54089/audio.wav)
+avatar-celery-worker-gpu  | [2026-08-06 08:29:18,542: WARNING/ForkPoolWorker-1] 172.20.0.4 - - [06/Aug/2026 08:29:18] "GET /avatar.png HTTP/1.1" 200 -
+avatar-celery-worker-gpu  | [2026-08-06 08:29:18,607: WARNING/ForkPoolWorker-1] 172.20.0.4 - - [06/Aug/2026 08:29:18] "GET /audio.wav HTTP/1.1" 200 -
+avatar-celery-worker-gpu  | [2026-08-06 09:24:12,359: INFO/ForkPoolWorker-1] HTTP Request: POST http://sadtalker:5003/generate "HTTP/1.1 200 OK"
+avatar-celery-worker-gpu  | [2026-08-06 09:24:12,531: INFO/ForkPoolWorker-1] SadTalker animation done: /tmp/videos/explainer/a54565b5-7203-4dc3-9666-dd755848dcf7/clips/section_00/clip.mp4
+avatar-celery-worker-gpu  | [2026-08-06 09:24:12,548: INFO/ForkPoolWorker-1] sections_to_clips: [0] done -- 55376 bytes via sadtalker
+avatar-celery-worker-gpu  | [2026-08-06 09:24:12,548: INFO/ForkPoolWorker-1] sections_to_clips: produced 1 clip(s)
+avatar-celery-worker-gpu  | [2026-08-06 09:24:12,827: INFO/ForkPoolWorker-1] Pipeline job a54565b5-7203-4dc3-9666-dd755848dcf7 done
+avatar-celery-worker-gpu  | [2026-08-06 09:24:12,945: INFO/ForkPoolWorker-1] Task run_pipeline_job[fb5befa0-7729-4160-8354-f5c932ab806f] succeeded in 3379.070009328003s: None
