@@ -311,8 +311,8 @@ services:
   sadtalker:
     build:
       context: ./services/sadtalker
-      dockerfile: Dockerfile
-    image: fdcai-talk-sadtalker
+      dockerfile: Dockerfile.gpu
+    image: fdcai-talk-sadtalker-gpu
     container_name: avatar-sadtalker
     profiles: [cpu-avatar]
     ports:
