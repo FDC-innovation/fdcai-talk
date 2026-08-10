@@ -65,6 +65,43 @@ class STTService:
             await self.initialize()
         return await asyncio.to_thread(self._transcribe_sync, audio_data, language)
 
+    async def transcribe_with_words(
+        self, audio_data: Union[bytes, str], language: str = "en"
+    ) -> dict:
+        """Transcribe returning word-level timestamps (for clip detection)."""
+        if self.provider != "whisper":
+            raise ValueError(f"Unsupported STT provider: {self.provider}")
+        if self.model is None:
+            await self.initialize()
+        return await asyncio.to_thread(self._transcribe_words_sync, audio_data, language)
+
+    def _transcribe_words_sync(self, audio_data: Union[bytes, str], language: str) -> dict:
+        assert self.model is not None
+        source = io.BytesIO(audio_data) if isinstance(audio_data, bytes) else audio_data
+        segments, info = self.model.transcribe(
+            source,
+            language=language,
+            beam_size=5,
+            word_timestamps=True,
+            vad_filter=True,
+            vad_parameters=dict(min_silence_duration_ms=500),
+        )
+        words = []
+        texts = []
+        duration = 0.0
+        for seg in segments:
+            texts.append(seg.text)
+            duration = max(duration, float(seg.end))
+            for w in seg.words or []:
+                words.append(
+                    {"word": w.word.strip(), "start": float(w.start), "end": float(w.end)}
+                )
+        text = " ".join(t.strip() for t in texts).strip()
+        logger.info(
+            f"Transcribed with words: {len(words)} words, {duration:.1f}s (lang={info.language})"
+        )
+        return {"text": text, "words": words, "duration": duration}
+
     def _decode_with_soundfile(self, audio_data: Union[bytes, str]) -> np.ndarray:
         """Fallback decoder for formats PyAV chokes on (raw WAV/FLAC/OGG)."""
         if isinstance(audio_data, bytes):

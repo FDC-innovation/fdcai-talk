@@ -47,6 +47,8 @@ _EDGE_VOICES = {
     "de": "de-DE-KatjaNeural",
     "el": "el-GR-AthinaNeural",
     "en": "en-US-AriaNeural",
+    # English male/female options for demo voice selection (edge-tts neural).
+    # Picked in _edge_fallback via voice_gender; defaults keep old behavior.
     "es": "es-ES-ElviraNeural",
     "fi": "fi-FI-NooraNeural",
     "fr": "fr-FR-DeniseNeural",
@@ -151,6 +153,19 @@ class TTSService:
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
         try:
+            # No-GPU escape hatch: on machines without a GPU, Chatterbox will
+            # download ~3GB and then fail to load anyway. Set TTS_FORCE_EDGE=1
+            # to skip straight to the Edge TTS neural fallback (fast, CPU-only,
+            # no cloned voice). Real cloned/Chatterbox voice runs on the GPU box.
+            if os.getenv("TTS_FORCE_EDGE"):
+                logger.info("TTS_FORCE_EDGE set — skipping Chatterbox, using Edge TTS")
+                await self._edge_fallback(text, output_path, language)
+                return SynthResult(
+                    output_path=output_path,
+                    engine="edge-tts",
+                    fallback=True,
+                    voice_cloned=False,
+                )
             if self.model is None:
                 await self.initialize()
 
@@ -203,7 +218,7 @@ class TTSService:
                 voice_cloned=False,
             )
 
-    async def _edge_fallback(self, text: str, output_path: str, language: str = "en") -> str:
+    async def _edge_fallback(self, text: str, output_path: str, language: str = "en", voice_gender: str = "female", rate: str = "-12%") -> str:
         """Free neural-voice fallback via Microsoft Edge TTS (no key, no GPU)."""
         import edge_tts
         from pydub import AudioSegment
@@ -212,7 +227,12 @@ class TTSService:
         logger.info(f"Synthesizing (edge-tts, {voice}): {text[:80]}...")
         mp3_path = output_path.replace(".wav", "_edge.mp3")
 
-        await edge_tts.Communicate(text, voice).save(mp3_path)
+        # English gets explicit male/female choice; other langs keep their default.
+        _EN = {"male": "en-US-GuyNeural", "female": "en-US-AriaNeural"}
+        if language == "en":
+            voice = _EN.get(voice_gender, _EN["female"])
+        logger.info(f"Synthesizing (edge-tts, {voice}, rate={rate}): {text[:80]}...")
+        await edge_tts.Communicate(text, voice, rate=rate).save(mp3_path)
         await asyncio.to_thread(
             lambda: AudioSegment.from_mp3(mp3_path).export(output_path, format="wav")
         )

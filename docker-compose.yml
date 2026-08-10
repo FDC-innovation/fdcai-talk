@@ -58,6 +58,8 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - UVICORN_WORKERS=${UVICORN_WORKERS:-4}
+      - WHISPER_MODEL=${WHISPER_MODEL:-small}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_REGION=${AWS_REGION:-us-east-1}
@@ -71,7 +73,8 @@ services:
       - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-2000}
       - TTS_PROVIDER=${TTS_PROVIDER:-chatterbox}
       - AVATAR_ENGINE=${AVATAR_ENGINE:-musetalk}
-      - WHISPER_MODEL=${WHISPER_MODEL:-base}
+      - TTS_FORCE_EDGE=${TTS_FORCE_EDGE:-}
+      - WHISPER_MODEL=${WHISPER_MODEL:-small}
       - SECRET_KEY=${SECRET_KEY}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - ENVIRONMENT=${ENVIRONMENT:-development}
@@ -140,12 +143,14 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: avatar-celery-worker
-    command: celery -A app.celery_app worker --loglevel=info --concurrency=2
+    command: celery -A app.celery_app worker --loglevel=info --pool=solo -Q cpu,celery
     environment:
       - DATABASE_URL=postgresql://${DATABASE_USER:-avatar_user}:${DATABASE_PASSWORD:-change_this_password}@postgres:5432/${DATABASE_NAME:-avatar_db}
+      - SADTALKER_URL=${SADTALKER_URL}
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - WHISPER_MODEL=${WHISPER_MODEL:-small}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_REGION=${AWS_REGION:-us-east-1}
@@ -156,6 +161,7 @@ services:
       - LLM_MODEL=${LLM_MODEL:-claude-sonnet-4-6}
       - TTS_PROVIDER=${TTS_PROVIDER:-chatterbox}
       - AVATAR_ENGINE=${AVATAR_ENGINE:-musetalk}
+      - TTS_FORCE_EDGE=${TTS_FORCE_EDGE:-}
       - SECRET_KEY=${SECRET_KEY}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - ENVIRONMENT=${ENVIRONMENT:-development}
@@ -179,6 +185,70 @@ services:
       start_period: 30s
     networks:
       - avatar-network
+    restart: unless-stopped
+
+  celery-worker-gpu:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: avatar-celery-worker-gpu
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=1 -Q gpu
+    environment:
+      - DATABASE_URL=postgresql://${DATABASE_USER:-avatar_user}:${DATABASE_PASSWORD:-change_this_password}@postgres:5432/${DATABASE_NAME:-avatar_db}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - WHISPER_MODEL=${WHISPER_MODEL:-small}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+      - LLM_PROVIDER=${LLM_PROVIDER:-anthropic}
+      - LLM_MODEL=${LLM_MODEL:-claude-sonnet-4-6}
+      - TTS_PROVIDER=${TTS_PROVIDER:-chatterbox}
+      - AVATAR_ENGINE=${AVATAR_ENGINE:-musetalk}
+      - TTS_FORCE_EDGE=${TTS_FORCE_EDGE:-}
+      - SECRET_KEY=${SECRET_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - DEBUG=${DEBUG:-true}
+      - SADTALKER_URL=${SADTALKER_URL}
+    volumes:
+      - ./backend:/app
+      - avatar_cache:/tmp/avatars
+      - video_cache:/tmp/videos
+      - audio_cache:/tmp/audio
+      - voice_profiles:/app/voice_profiles
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - avatar-network
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: avatar-ollama
+    volumes:
+      - ollama_models:/root/.ollama
+    networks:
+      - avatar-network
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     restart: unless-stopped
 
   flower:
@@ -239,7 +309,37 @@ services:
       - avatar-network
     restart: unless-stopped
 
+  sadtalker:
+    build:
+      context: ./services/sadtalker
+      dockerfile: Dockerfile.gpu
+    image: fdcai-talk-sadtalker-gpu
+    container_name: avatar-sadtalker
+    profiles: [cpu-avatar]
+    ports:
+      - "5003:5003"
+    volumes:
+      - sadtalker_models:/app/checkpoints
+    networks:
+      - avatar-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5003/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
 volumes:
+  ollama_models:
+  sadtalker_models:
   postgres_data:
     driver: local
   redis_data:

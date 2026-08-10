@@ -117,6 +117,8 @@ class LLMService:
             self.client = openai.AsyncOpenAI(
                 api_key=settings.OPENAI_API_KEY or "ollama",
                 base_url=base_url,
+                timeout=1800.0,  # 30 min: local CPU inference (8b) is slow
+                max_retries=0,   # don't silently retry a 20-min call
             )
             self.provider = "openai"  # downstream code paths are identical
             logger.info(f"LLM provider 'ollama' → OpenAI-compatible client at {base_url}")
@@ -133,11 +135,12 @@ class LLMService:
         messages: List[Dict[str, str]],
         system_prompt: Optional[str] = None,
         thinking: bool = False,
+        json_mode: bool = False,
     ) -> str:
         if self.provider == "anthropic":
             return await self._generate_anthropic(messages, system_prompt, thinking)
         if self.provider == "openai":
-            return await self._generate_openai(messages, system_prompt)
+            return await self._generate_openai(messages, system_prompt, json_mode=json_mode)
         raise LLMError(f"Unsupported LLM provider: {self.provider}")
 
     async def _generate_anthropic(
@@ -184,17 +187,21 @@ class LLMService:
         self,
         messages: List[Dict[str, str]],
         system_prompt: Optional[str] = None,
+        json_mode: bool = False,
     ) -> str:
         if system_prompt:
             messages = [{"role": "system", "content": system_prompt}] + messages
 
         try:
-            response = await self.client.chat.completions.create(
+            kwargs = dict(
                 model=self.model,
                 messages=messages,
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
             )
+            if json_mode:
+                kwargs["response_format"] = {"type": "json_object"}
+            response = await self.client.chat.completions.create(**kwargs)
         except Exception as e:
             mapped = _map_openai_exception(e)
             logger.error("openai_call_failed", extra={"error_type": type(e).__name__})

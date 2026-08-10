@@ -1,0 +1,50 @@
+# SadTalker — CUDA 11.8 production image
+# Requires: nvidia-docker / Docker with GPU access on the host
+# On Mac/CPU-only machines use the default Dockerfile (slow but works)
+FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.10 python3-pip python3.10-dev \
+    git wget ffmpeg libgl1 libglib2.0-0 build-essential cmake \
+    && ln -sf python3.10 /usr/bin/python \
+    && ln -sf pip3 /usr/bin/pip \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+RUN git clone https://github.com/OpenTalker/SadTalker.git .
+RUN pip install --no-cache-dir --timeout 120 --retries 10 torch torchvision torchaudio \
+    --index-url https://download.pytorch.org/whl/cu128
+RUN pip install --no-cache-dir -r requirements.txt
+# Patch 1: basicsr/torchvision compat
+RUN sed -i 's/from torchvision.transforms.functional_tensor import rgb_to_grayscale/from torchvision.transforms.functional import rgb_to_grayscale/' \
+    /usr/local/lib/python3.10/dist-packages/basicsr/data/degradations.py
+# Patch 2: numpy removed aliases
+RUN printf '%s\n' \
+"import os, re" \
+"patterns = [(r'np\.float\b','float'),(r'np\.int\b','int'),(r'np\.bool\b','bool'),(r'np\.object\b','object'),(r'np\.str\b','str')]" \
+"for root,dirs,files in os.walk('src'):" \
+"    for fname in files:" \
+"        if fname.endswith('.py'):" \
+"            fpath=os.path.join(root,fname); content=open(fpath).read(); new=content" \
+"            for pat,repl in patterns: new=re.sub(pat,repl,new)" \
+"            if new!=content: open(fpath,'w').write(new)" \
+"print('numpy patches applied')" \
+> /tmp/patch2.py && python3 /tmp/patch2.py
+# Patch 3: t[0]/t[1] float cast
+RUN printf '%s\n' \
+"p='src/face3d/util/preprocess.py'" \
+"content=open(p).read()" \
+"old='trans_params = np.array([w0, h0, s, t[0], t[1]])'" \
+"new='trans_params = np.array([w0, h0, s, float(t[0]), float(t[1])])'" \
+"if old in content:" \
+"    open(p,'w').write(content.replace(old,new))" \
+"    print('patch 3 applied')" \
+"else:" \
+"    print('patch 3 not needed')" \
+> /tmp/patch3.py && python3 /tmp/patch3.py
+# Download model checkpoints (~5GB — cached in Docker layer)
+RUN bash scripts/download_models.sh
+COPY requirements-server.txt .
+RUN pip install --no-cache-dir -r requirements-server.txt
+COPY server.py .
+EXPOSE 5003
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "5003", "--workers", "1"]

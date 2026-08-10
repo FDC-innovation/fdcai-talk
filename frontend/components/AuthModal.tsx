@@ -114,34 +114,32 @@ export function AuthModal() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-surface-950/90 backdrop-blur-md"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#1D1D1F]/20 backdrop-blur-md"
       role="dialog"
       aria-modal="true"
       aria-labelledby="auth-modal-title"
       aria-describedby="auth-modal-desc"
     >
-      <div ref={dialogRef} className="w-full max-w-md mx-4 glass-card rounded-2xl p-8 animate-scale-in">
+      <div ref={dialogRef} className="lightscope w-full max-w-md mx-4 bg-white rounded-[22px] p-8 animate-scale-in border border-[#EDEDF0]" style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
         {/* Logo */}
         <div className="flex flex-col items-center gap-3 mb-8">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-accent-600 flex items-center justify-center shadow-glow">
-            <Sparkles size={22} className="text-white" />
-          </div>
+          <img src="/chalchitra-logo.png" alt="Chalchitra" className="w-14 h-14 rounded-[14px] object-contain" />
           <div className="text-center">
-            <h1 id="auth-modal-title" className="text-2xl font-black gradient-text">FDCAI</h1>
-            <p id="auth-modal-desc" className="text-sm text-gray-500 mt-0.5">Sign in to your account</p>
+            <h1 id="auth-modal-title" className="wordmark-chalchitra text-[30px] text-[#1D1D1F] leading-none">Chalchitra</h1>
+            <p id="auth-modal-desc" className="text-[14px] text-[#6E6E73] mt-1.5">Sign in to your studio</p>
           </div>
         </div>
 
         {/* Tab switcher */}
-        <div className="flex gap-1 p-1 rounded-xl bg-surface-800/80 border border-white/8 mb-6">
+        <div className="flex gap-1 p-1 rounded-xl bg-[#F0F0F2] mb-6">
           {(['login', 'register'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-all duration-200
                 ${tab === t
-                  ? 'bg-gradient-to-r from-primary-600/80 to-accent-600/80 text-white shadow-glow-sm'
-                  : 'text-gray-400 hover:text-white'
+                  ? 'bg-white text-[#1D1D1F] shadow-sm'
+                  : 'text-[#6E6E73] hover:text-[#1D1D1F]'
                 }`}
             >
               {t === 'login' ? <><LogIn size={14} /> Sign In</> : <><UserPlus size={14} /> Register</>}
@@ -153,7 +151,7 @@ export function AuthModal() {
         {tab === 'login' && (
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-300">Email</label>
+              <label className="text-[13px] font-medium text-[#1D1D1F]">Email</label>
               <input
                 type="email"
                 value={loginEmail}
@@ -165,7 +163,7 @@ export function AuthModal() {
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-300">Password</label>
+              <label className="text-[13px] font-medium text-[#1D1D1F]">Password</label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
@@ -185,7 +183,7 @@ export function AuthModal() {
                 </button>
               </div>
             </div>
-            <button type="submit" disabled={isLoading} className="btn-primary w-full py-3 rounded-xl mt-2">
+            <button type="submit" disabled={isLoading} className="btn-primary w-full py-3 rounded-full mt-2">
               {isLoading ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
               Sign In
             </button>
@@ -197,7 +195,7 @@ export function AuthModal() {
           <form onSubmit={handleRegister} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-gray-300">Username</label>
+                <label className="text-[13px] font-medium text-[#1D1D1F]">Username</label>
                 <input
                   type="text"
                   value={regUsername}
@@ -208,7 +206,7 @@ export function AuthModal() {
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-gray-300">Full Name</label>
+                <label className="text-[13px] font-medium text-[#1D1D1F]">Full Name</label>
                 <input
                   type="text"
                   value={regFullName}
@@ -219,7 +217,7 @@ export function AuthModal() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-300">Email</label>
+              <label className="text-[13px] font-medium text-[#1D1D1F]">Email</label>
               <input
                 type="email"
                 value={regEmail}
@@ -230,7 +228,7 @@ export function AuthModal() {
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-300">Password</label>
+              <label className="text-[13px] font-medium text-[#1D1D1F]">Password</label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
@@ -250,7 +248,7 @@ export function AuthModal() {
                 </button>
               </div>
             </div>
-            <button type="submit" disabled={isLoading} className="btn-primary w-full py-3 rounded-xl mt-2">
+            <button type="submit" disabled={isLoading} className="btn-primary w-full py-3 rounded-full mt-2">
               {isLoading ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />}
               Create Account
             </button>
@@ -267,7 +265,7 @@ export function AuthModal() {
         {/* Guest mode */}
         <button
           onClick={continueAsGuest}
-          className="btn-secondary w-full py-2.5 rounded-xl text-sm"
+          className="btn-secondary w-full py-2.5 rounded-full text-sm"
         >
           <User size={15} />
           Continue as Guest

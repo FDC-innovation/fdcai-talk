@@ -129,3 +129,23 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     user_id: Optional[str] = None
+
+
+# Job Schemas
+class JobCreate(BaseModel):
+    params: Optional[Dict[str, Any]] = None
+
+
+class JobResponse(BaseModel):
+    id: str
+    user_id: str
+    pipeline: str
+    status: str
+    progress: int
+    params: Optional[Dict[str, Any]] = None
+    output: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}

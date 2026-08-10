@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&family=Playfair+Display:ital,wght@1,600;1,700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -329,3 +329,59 @@
 .react-hot-toast > div {
   font-family: 'Inter', sans-serif !important;
 }
+
+/* ── LIGHT SCOPE — relights legacy dark panels to match the Apple-light shell ── */
+.lightscope { color: #1D1D1F; }
+.lightscope .card,
+.lightscope .glass-card,
+.lightscope .glass-card-hover,
+.lightscope .card-glow,
+.lightscope .feature-card {
+  background: #FFFFFF !important;
+  border-color: #EDEDF0 !important;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.06) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.lightscope .bg-surface-950,
+.lightscope .bg-surface-900,
+.lightscope .bg-surface-800,
+.lightscope .bg-surface-700,
+.lightscope .bg-surface-600,
+.lightscope .bg-surface-500 { background-color: #F5F5F7 !important; }
+.lightscope [class*="bg-surface-700/"],
+.lightscope [class*="bg-surface-800/"] { background-color: #F5F5F7 !important; }
+.lightscope .text-white { color: #1D1D1F !important; }
+.lightscope .text-gray-100,
+.lightscope .text-gray-200,
+.lightscope .text-gray-300 { color: #1D1D1F !important; }
+.lightscope .text-gray-400,
+.lightscope .text-gray-500,
+.lightscope .text-gray-600 { color: #6E6E73 !important; }
+.lightscope [class*="border-white/"] { border-color: #E5E5EA !important; }
+.lightscope .divider { background: #E5E5EA !important; }
+.lightscope .input-field {
+  background: #FFFFFF !important;
+  border-color: #D2D2D7 !important;
+  color: #1D1D1F !important;
+}
+.lightscope .input-field::placeholder { color: #AEAEB2 !important; }
+.lightscope .btn-primary {
+  background: #0071E3 !important;
+  box-shadow: none !important;
+  color: #FFFFFF !important;
+}
+.lightscope .btn-secondary {
+  background: #FFFFFF !important;
+  border-color: #D2D2D7 !important;
+  color: #1D1D1F !important;
+}
+.lightscope .badge-purple,
+.lightscope .badge-blue { background: rgba(0,113,227,0.10) !important; color: #0071E3 !important; }
+.lightscope .shadow-glow,
+.lightscope .shadow-glow-sm { box-shadow: 0 4px 24px rgba(0,0,0,0.06) !important; }
+.lightscope [class*="text-primary-"] { color: #0071E3 !important; }
+.lightscope [class*="bg-primary-500/"],
+.lightscope [class*="bg-primary-600/"] { background-color: rgba(0,113,227,0.10) !important; }
+
+.wordmark-chalchitra { font-family: 'Playfair Display', Georgia, serif; font-style: italic; font-weight: 700; letter-spacing: 0.01em; }

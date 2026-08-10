@@ -21,7 +21,13 @@ router = APIRouter()
 
 
 def _user_id(current_user: Optional[User]) -> str:
-    return current_user.id if current_user else "demo-user"
+    if current_user:
+        return current_user.id
+    from app.config import settings
+    if settings.DEBUG:
+        return "demo-user"
+    from fastapi import HTTPException, status
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
 
 
 @router.post("/create", response_model=SessionResponse, status_code=status.HTTP_201_CREATED)

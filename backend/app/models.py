@@ -38,6 +38,7 @@ class User(Base):
     # Relationships
     avatars = relationship("Avatar", back_populates="user", cascade="all, delete-orphan")
     sessions = relationship("Session", back_populates="user", cascade="all, delete-orphan")
+    jobs = relationship("Job", back_populates="user", cascade="all, delete-orphan")  # NEW
 
 
 class Avatar(Base):
@@ -147,3 +148,26 @@ class Conversation(Base):
 
     # Relationships
     session = relationship("Session", back_populates="conversations")
+
+
+class Job(Base):
+    __tablename__ = "jobs"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    pipeline = Column(String, nullable=False)  # clips, sadtalker, podcast
+    status = Column(String, default="pending")  # pending, running, done, failed
+    progress = Column(Integer, default=0)  # 0-100 for UI progress bar
+    params = Column(JSON, nullable=True)  # pipeline-specific inputs
+    output = Column(JSON, nullable=True)  # pipeline-specific results
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    user = relationship("User", back_populates="jobs")
+
+    __table_args__ = (
+        # "My jobs, newest first" — same pattern as ix_avatars_user_created.
+        Index("ix_jobs_user_created", "user_id", "created_at"),
+    )

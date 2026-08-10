@@ -22,8 +22,8 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     task_track_started=True,
-    task_time_limit=30 * 60,  # 30 minutes
-    task_soft_time_limit=25 * 60,  # 25 minutes
+    task_time_limit=210 * 60,  # 3.5 hours (CPU SadTalker render)
+    task_soft_time_limit=200 * 60,  # 3.3 hours (CPU SadTalker render)
     beat_schedule={
         "cleanup-old-files-daily": {
             "task": "cleanup_old_files",
@@ -31,79 +31,6 @@ celery_app.conf.update(
         },
     },
 )
-
-
-@celery_app.task(name="process_avatar", bind=True, max_retries=3)
-def process_avatar_task(self, avatar_id: str, image_path: str):
-    """Background task to process avatar image"""
-    try:
-        logger.info(f"Processing avatar {avatar_id} from {image_path}")
-
-        import asyncio
-
-        from app.services.avatar_processor import avatar_processor
-
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        # Honor the actual system temp dir instead of hardcoding /tmp.
-        processed_dir = Path(tempfile.gettempdir()) / "avatars"
-        processed_dir.mkdir(parents=True, exist_ok=True)
-        processed_path = str(processed_dir / f"{avatar_id}_processed.jpg")
-        result_path, metadata = loop.run_until_complete(
-            avatar_processor.process_image(image_path, processed_path)
-        )
-        loop.close()
-
-        logger.info(f"Avatar {avatar_id} processed successfully: {result_path}")
-        return {
-            "avatar_id": avatar_id,
-            "processed_path": result_path,
-            "metadata": metadata,
-            "status": "ready",
-        }
-
-    except Exception as e:
-        logger.error(f"Failed to process avatar {avatar_id}: {e}")
-        raise self.retry(exc=e, countdown=60 * (self.request.retries + 1))
-
-
-@celery_app.task(name="generate_video", bind=True, max_retries=2)
-def generate_video_task(self, session_id: str, text: str, avatar_image_path: str):
-    """Background task to generate avatar video"""
-    try:
-        logger.info(f"Generating video for session {session_id}")
-
-        import asyncio
-
-        from app.services.animator import avatar_animator
-        from app.services.tts import tts_service
-
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        # mkstemp creates the file atomically with owner-only perms (0600) —
-        # mktemp only returned a name, leaving a TOCTOU race and world-readable
-        # output. We close the fds immediately; the services write to the paths.
-        afd, audio_path = tempfile.mkstemp(suffix=".wav")
-        vfd, video_path = tempfile.mkstemp(suffix=".mp4")
-        os.close(afd)
-        os.close(vfd)
-
-        loop.run_until_complete(tts_service.synthesize(text, audio_path))
-        loop.run_until_complete(avatar_animator.animate(avatar_image_path, audio_path, video_path))
-
-        loop.close()
-
-        # Clean up audio temp file
-        Path(audio_path).unlink(missing_ok=True)
-
-        logger.info(f"Video generated for session {session_id}: {video_path}")
-        return {"session_id": session_id, "video_path": video_path, "status": "completed"}
-
-    except Exception as e:
-        logger.error(f"Failed to generate video for session {session_id}: {e}")
-        raise self.retry(exc=e, countdown=30 * (self.request.retries + 1))
 
 
 @celery_app.task(name="cleanup_old_files")
@@ -163,3 +90,251 @@ def cleanup_old_files_task():
     except Exception as e:
         logger.error(f"Cleanup task failed: {e}")
         raise
+
+
+@celery_app.task(name="run_pipeline_job", bind=True, max_retries=3)
+def run_pipeline_job(self, job_id: str):
+    """Pipeline job runner: pending -> running -> done/failed. Retries up to 3x on transient errors."""
+    import asyncio
+
+    logger.info(f"Starting pipeline job {job_id}")
+
+    async def _run():
+        from app.database import AsyncSessionLocal
+        from app.models import Job
+
+        async with AsyncSessionLocal() as session:
+            job = await session.get(Job, job_id)
+            if job is None:
+                logger.error(f"Job {job_id} not found")
+                return
+
+            try:
+                job.status = "running"
+                job.progress = 0
+                await session.commit()
+
+                if job.pipeline == "clips":
+                    from app.services.clip_detector import detect_clips
+                    from app.services.stt import stt_service
+
+                    params = job.params or {}
+                    media_path = params.get("media_path")
+                    if not media_path:
+                        raise ValueError("clips job requires params.media_path")
+
+                    job.progress = 10
+                    await session.commit()
+
+                    r = await stt_service.transcribe_with_words(media_path)
+                    job.progress = 50
+                    await session.commit()
+
+                    clips = await detect_clips(
+                        r["words"], r["text"], params.get("instructions")
+                    )
+                    job.progress = 60
+                    await session.commit()
+                    from app.services.clip_cutter import cut_clips
+                    cut_results = cut_clips(media_path, clips, str(job.id), words=r["words"])
+                    job.progress = 90
+                    await session.commit()
+                    job.output = {
+                        "clips": cut_results,
+                        "transcript": r["text"],
+                        "duration": r["duration"],
+                    }
+                elif job.pipeline == "podcast":
+                    from app.services.stt import stt_service
+                    from app.services.podcast_pipeline import detect_chapters, render_podcast
+                    params = job.params or {}
+                    media_path = params.get("media_path")
+                    if not media_path:
+                        raise ValueError("podcast job requires params.media_path")
+                    job.progress = 10
+                    await session.commit()
+                    r = await stt_service.transcribe_with_words(media_path)
+                    job.progress = 40
+                    await session.commit()
+                    chapters = await detect_chapters(
+                        r["text"], r["duration"], params.get("instructions")
+                    )
+                    job.progress = 60
+                    await session.commit()
+                    result = render_podcast(media_path, chapters, r["words"], str(job.id))
+                    job.progress = 90
+                    await session.commit()
+                    job.output = {
+                        "chapters": result["chapters"],
+                        "final_video": result["final_video"],
+                        "transcript": r["text"],
+                        "duration": r["duration"],
+                    }
+                elif job.pipeline == "talking-head":
+                    from app.config import settings as _settings
+                    params = job.params or {}
+                    image_url = params.get("image_url")
+                    audio_url = params.get("audio_url")
+                    if not image_url or not audio_url:
+                        raise ValueError("talking-head job requires params.image_url and params.audio_url")
+                    job.progress = 10
+                    await session.commit()
+
+                    _engine = (params.get("engine") or _settings.AVATAR_ENGINE or "sadtalker").lower()
+                    if _engine == "sadtalker":
+                        # Proven HTTP path: SadTalker server (GPU box) or stub.
+                        from app.services.sadtalker_engine import generate_avatar
+                        result = await generate_avatar(image_url, audio_url, str(job.id))
+                    else:
+                        # MuseTalk / simple path via the animator. Animator needs
+                        # LOCAL files, so download the URLs first, then animate.
+                        # animator.animate() GPU-detects and auto-falls-back to
+                        # simple (ffmpeg static image + audio) when MuseTalk/GPU
+                        # is unavailable — safe on no-GPU dev machines.
+                        import os as _os, httpx as _httpx
+                        from app.services.animator import AvatarAnimator
+                        _out_dir = f"/tmp/videos/animator/{job.id}"
+                        _os.makedirs(_out_dir, exist_ok=True)
+                        _img_path = f"{_out_dir}/source.png"
+                        _aud_path = f"{_out_dir}/audio.wav"
+                        _out_path = f"{_out_dir}/avatar.mp4"
+                        async with _httpx.AsyncClient(timeout=120) as _c:
+                            for _url, _dest in ((image_url, _img_path), (audio_url, _aud_path)):
+                                _r = await _c.get(_url)
+                                if _r.status_code != 200:
+                                    raise ValueError(f"Could not fetch {_url} ({_r.status_code})")
+                                with open(_dest, "wb") as _f:
+                                    _f.write(_r.content)
+                        _animator = AvatarAnimator()
+                        _final = await _animator.animate(_img_path, _aud_path, _out_path)
+                        result = {
+                            "status": "done",
+                            "file_path": _final,
+                            "engine": _animator.engine,
+                            "size_bytes": _os.path.getsize(_final) if _os.path.exists(_final) else 0,
+                        }
+
+                    job.progress = 90
+                    await session.commit()
+                    job.output = result
+                elif job.pipeline == "explainer":
+                    # Stage A (video -> section scripts) + Stage B (sections ->
+                    # per-section avatar clips). Deck video arrives as a LOCAL
+                    # media_path (POST /jobs/upload). Avatar image arrives as an
+                    # image_url (avatar upload returns a URL), so download it to
+                    # a local file before Stage B, mirroring the talking-head
+                    # branch. Voice: pass speaker_wav for cloned voice if given.
+                    import os as _os, httpx as _httpx
+                    from app.services.explainer_pipeline import (
+                        video_to_scripts,
+                        sections_to_clips,
+                    )
+                    params = job.params or {}
+                    media_path = params.get("media_path")
+                    image_url = params.get("image_url")
+                    if not media_path or not image_url:
+                        raise ValueError(
+                            "explainer job requires params.media_path and params.image_url"
+                        )
+                    language = params.get("language", "en")
+                    instructions = params.get("instructions")
+                    speaker_wav = params.get("speaker_wav")
+                    if not speaker_wav:
+                        _voice_id = params.get("voice_id")
+                        if _voice_id:
+                            try:
+                                import json as _json
+                                from pathlib import Path as _Path
+                                _idx = _Path("voice_profiles/index.json")
+                                if _idx.exists():
+                                    for _e in _json.loads(_idx.read_text()):
+                                        if _e.get("id") == _voice_id and _e.get("wav_path"):
+                                            if _Path(_e["wav_path"]).exists():
+                                                speaker_wav = _e["wav_path"]
+                                                logger.info(f"explainer: cloning voice {_voice_id} -> {speaker_wav}")
+                                            break
+                            except Exception as _ve:
+                                logger.warning(f"explainer: could not resolve voice_id {_voice_id}: {_ve}")
+
+                    job.progress = 10
+                    await session.commit()
+                    stage_a = await video_to_scripts(
+                        media_path, language=language, instructions=instructions
+                    )
+                    sections = stage_a.get("sections", [])
+                    if not sections:
+                        raise ValueError(
+                            f"explainer: no sections produced ({stage_a.get('message', 'empty')})"
+                        )
+                    job.progress = 45
+                    await session.commit()
+
+                    _work = f"/tmp/videos/explainer/{job.id}"
+                    _os.makedirs(_work, exist_ok=True)
+                    _img_path = f"{_work}/avatar.png"
+                    # Avatar image_url is a user-facing URL (e.g. localhost:8000).
+                    # Inside the worker container, localhost is the worker itself,
+                    # so rewrite the host to the backend service on the compose
+                    # network before fetching. No-op if already an internal URL.
+                    _fetch_url = (
+                        image_url
+                        .replace("//localhost:8000", "//backend:8000")
+                        .replace("//127.0.0.1:8000", "//backend:8000")
+                    )
+                    async with _httpx.AsyncClient(timeout=120) as _c:
+                        _r = await _c.get(_fetch_url)
+                        if _r.status_code != 200:
+                            raise ValueError(
+                                f"Could not fetch avatar image {image_url} ({_r.status_code})"
+                            )
+                        with open(_img_path, "wb") as _f:
+                            _f.write(_r.content)
+                    job.progress = 55
+                    await session.commit()
+
+                    clips = await sections_to_clips(
+                        sections=sections,
+                        image_path=_img_path,
+                        speaker_wav=speaker_wav,
+                        language=language,
+                        out_dir=f"{_work}/clips",
+                    )
+                    job.progress = 90
+                    await session.commit()
+                    job.output = {
+                        "clips": clips,
+                        "sections": sections,
+                        "transcript": stage_a.get("transcript", ""),
+                        "engine": clips[0]["engine"] if clips else None,
+                    }
+                else:
+                    for pct in (25, 50, 75):
+                        await asyncio.sleep(3)
+                        job.progress = pct
+                        await session.commit()
+                    job.output = {"echo": job.params}
+
+                job.status = "done"
+                job.progress = 100
+                await session.commit()
+                logger.info(f"Pipeline job {job_id} done")
+            except Exception as e:
+                logger.error(f"Pipeline job {job_id} failed (attempt {self.request.retries+1}): {e}")
+                is_hard_error = isinstance(e, (ValueError, FileNotFoundError))
+                if is_hard_error or self.request.retries >= self.max_retries:
+                    job.status = "failed"
+                    job.error = str(e)
+                    await session.commit()
+                else:
+                    job.status = "pending"
+                    job.progress = 0
+                    job.error = f"Retrying ({self.request.retries+1}/{self.max_retries}): {e}"
+                    await session.commit()
+                    raise self.retry(exc=e, countdown=30 * (self.request.retries + 1))
+
+    from app.database import engine
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(engine.dispose())
+    loop.run_until_complete(_run())
+    loop.close()
