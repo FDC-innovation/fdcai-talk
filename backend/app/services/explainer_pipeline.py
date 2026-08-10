@@ -78,6 +78,7 @@ async def build_section_scripts(
         messages=[{"role": "user", "content": prompt}],
         system_prompt=SYSTEM_PROMPT,
         thinking=False,
+        json_mode=True,
     )
     sections = parse_llm_json_array(raw, context="explainer_sections")
 
